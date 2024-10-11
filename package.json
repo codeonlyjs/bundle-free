@@ -1,7 +1,7 @@
 {
   "name": "@toptensoftware/bundle-free",
   "version": "1.0.0",
-  "description": "Express middleware for using node_modules client side without bundler",
+  "description": "ExpressJS middleware for using NPM packages client side without a bundler",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"

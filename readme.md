@@ -1,6 +1,6 @@
 # Bundle Free
 
-BundleFree is an ExpressJS middleware for using NPM packages client side without a bundler.
+BundleFree is an ExpressJS middleware for using NPM packages client side without a bundler
 
 Note: this is intended to be used during development only.  For production you should be using a bundler. 
 
@@ -24,8 +24,8 @@ import { * } from "/somefolder/somefile.js"
 
 Note:
 
-* The import path must start with a relative specifier (`.`, `/` etc...) because the browser requires this unless there's an import map), and 
-* The import path must end with `.js` because web-servers typically typically append `.js` when serving static files.
+* The import path must start with a relative specifier (`.`, `/` etc...) because the browser requires this unless there's an import map, and 
+* The import path must end with `.js` because web-servers don't typically append `.js` when serving static files.
 
 To make NPM packages available client side, we could make the `node_modules` folder available using ExpressJS's static middleware:
 
@@ -60,7 +60,7 @@ Suppose you have a client side ES6 app that's in the `./client` sub-folder
 of your ExpressJS project. Also, assume the bundled version is
 available in the `./client/dist` folder.
 
-* For production we want to server `./client/dist`.  
+* For production we want to serve `./client/dist`.  
 
 * For development we 
 want to serve `./client`.
@@ -142,11 +142,11 @@ The middleware works as follows:
     </script>
     ```
 
-    Note: the name of the `.js` file is determined from the modules's `package.json` file `main` setting.
+    Note: the name of the `.js` file is determined from each modules's `package.json` file `main` setting.
 
 3. All files in the client app folder are served using Express' static file middleware
 
-4. All files in the `node_modules` folder are server using Express' static file middleware
+4. All files in the `node_modules` folder are served using Express' static file middleware
    mounted under `/node_modules`
 
 ## Using Vite
@@ -173,7 +173,7 @@ The following shows how to setup package.json to build and run development and p
 }
 ```
 
-(Note: `bash` is used for the production command because it supports setting the NODE_ENV variable on the command line.  If running on Windows you'll need bash on your path, or some other way to launch the server)
+(Note: `bash` is used for the production command because it supports setting the `NODE_ENV` variable on the command line.  If running on Windows you'll need `bash` on your path, or some other way to launch the server)
 
 To build or run:
 
