@@ -1,6 +1,6 @@
 # Bundle Free
 
-BundleFree is an ExpressJS middleware for using NPM packages client side without a bundler
+BundleFree is an ExpressJS middleware for using NPM packages client side without a bundler.
 
 Note: this is intended to be used during development only.  For production you should be using a bundler. 
 
@@ -62,8 +62,9 @@ available in the `./client/dist` folder.
 
 * For production we want to serve `./client/dist`.  
 
-* For development we 
-want to serve `./client`.
+* For development we want to serve `./client`.
+
+(Obviously, you can adjust paths to suit your project).
 
 First, import the middleware:
 
@@ -71,7 +72,7 @@ First, import the middleware:
 import { bundleFree } from '@toptensoftware/bundleFree.js';
 ```
 
-Next, install the middleware as follows:
+Next, use the middleware:
 
 ```js
 if (process.env.NODE_ENV == "production")
