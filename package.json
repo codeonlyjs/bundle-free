@@ -1,0 +1,21 @@
+{
+  "name": "@toptensoftware/bundle-free",
+  "version": "1.0.0",
+  "description": "Express middleware for using node_modules client side without bundler",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Topten Software",
+  "contributors": [
+    {
+      "name": "Brad Robinson",
+      "email": "contact@toptensoftware.com"
+    }
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/toptensoftware/bundle-free"
+  },
+  "license": "Apache-2.0"
+}
