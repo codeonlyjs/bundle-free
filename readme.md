@@ -125,6 +125,8 @@ The middleware works as follows:
        
     becomes `/node_modules/@toptensoftware/module1`
 
+    (re-written as in `req.url` is modified)
+
 2. An import map is generated for all listed modules and injected to the top of any
    `.html` file served from the client app folder.
 
@@ -148,7 +150,8 @@ The middleware works as follows:
 3. All files in the client app folder are served using Express' static file middleware
 
 4. All files in the `node_modules` folder are served using Express' static file middleware
-   mounted under `/node_modules`
+   mounted under `/node_modules` (so re-written URLs from step 1 above, import mapped URLs 
+   from step 2 are served)
 
 ## Using Vite
 
