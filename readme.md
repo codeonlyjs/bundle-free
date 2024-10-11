@@ -19,7 +19,7 @@ Without bundling, ES6 modules typically need to be referenced
 on the client side as follows:
 
 ```js
-import { * } from "/somefolder/somefile.js"
+import * from "/somefolder/somefile.js"
 ```
 
 Note:
@@ -36,13 +36,13 @@ app.use("/node_modules", express.static(path.join(__dirname, "node_modules")));
 and then reference them client side as:
 
 ```js
-import { * } from "/node_modules/@toptensoftware/module1/index.js"
+import * from "/node_modules/@toptensoftware/module1/index.js"
 ```
 
 This works, but when it comes time to bundle for distribution, the bundler isn't going to understand import directives and prefers the bare name of the module:
 
 ```js
-import { * } from "@toptensoftware/module1"
+import * from "@toptensoftware/module1"
 ```
 
 BundleFree lets you use the bare name even when running unbundled during development.
@@ -104,7 +104,7 @@ modules listed in the `modules` option.
 ```js
 // Client side script files can now import directly from the bare
 // module name:
-import { * } from '@toptensoftware/module1';
+import * from '@toptensoftware/module1';
 ```
 
 Also, other resources in those modules can be accessed directly
