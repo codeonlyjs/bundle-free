@@ -1,8 +1,8 @@
 # Bundle Free
 
-BundleFree is an ExpressJS middleware for using NPM packages client side without a bundler.
-
-Note: this is intended to be used during development only.  For production you should be using a bundler. 
+BundleFree is an ExpressJS middleware that lets you, during development, 
+use NPM packages in front-end web clients without a bundler but in a manner
+that's compatible with bundling for production.
 
 ## About
 
@@ -10,8 +10,16 @@ BundleFree lets you build client side ES6 module apps that reference NPM
 packages directly using their bare names (ie: no `/` prefix or `.js` suffix).
 
 This means you can write your client side scripts and serve them directly
-from your ExpressJS server without bundling, but in a manner that's still
-compatible with bundling later for production distribution.
+from your ExpressJS server without needing to run a bundler.
+
+Notes: 
+
+* this is only intended to be used during development. For production you
+  should still use a bundler. 
+
+* this is not a browserification tool and only works for NPM packages designed
+  to work in browsers in the first place.
+
 
 ## The Problem
 
@@ -24,7 +32,7 @@ import * from "/somefolder/somefile.js"
 
 Note:
 
-* The import path must start with a relative specifier (`.`, `/` etc...) because the browser requires this unless there's an import map, and 
+* The import path must start with a relative specifier (`.`, `/` etc...) - the browser requires this unless there's an import map, and 
 * The import path must end with `.js` because web-servers don't typically append `.js` when serving static files.
 
 To make NPM packages available client side, we could make the `node_modules` folder available using ExpressJS's static middleware:
@@ -69,10 +77,10 @@ available in the `./client/dist` folder.
 First, import the middleware:
 
 ```js
-import { bundleFree } from '@toptensoftware/bundleFree.js';
+import { bundleFree } from '@toptensoftware/bundle-free.js';
 ```
 
-Next, use the middleware:
+Next, "use" the middleware:
 
 ```js
 if (process.env.NODE_ENV == "production")
@@ -117,15 +125,13 @@ Also, other resources in those modules can be accessed directly
 
 The middleware works as follows:
 
-1. Any url path that starts with the name of one of the specified modules is re-written
-   with a `node_modules` prefix.
+1. Any url path that starts with the name of one of the specified modules is
+   re-written (ie: `req.url` is modified) with a `node_modules` prefix.
 
    eg:
        `/@toptensoftware/module1` 
        
-    becomes `/node_modules/@toptensoftware/module1`
-
-    (re-written as in `req.url` is modified)
+   becomes `/node_modules/@toptensoftware/module1`
 
 2. An import map is generated for all listed modules and injected to the top of any
    `.html` file served from the client app folder.
@@ -147,17 +153,22 @@ The middleware works as follows:
 
     Note: the name of the `.js` file is determined from each modules's `package.json` file `main` setting.
 
-3. All files in the client app folder are served using Express' static file middleware
+3. All files in the client app folder are served using Express' static file 
+   middleware
 
-4. All files in the `node_modules` folder are served using Express' static file middleware
-   mounted under `/node_modules` (so re-written URLs from step 1 above, import mapped URLs 
-   from step 2 are served)
+4. All files in the `node_modules` folder are served using Express' static file
+   middleware mounted under `/node_modules` (so re-written URLs from step 1 above
+   are served)
 
 ## Using Vite
 
 [Vite](https://vite.dev/) is a fast, modern bundler that for simple cases doesn't even need a configuration file.
 
-The following shows how to setup package.json to build and run development and production versions of an ExpressJS app with a client side app structure similar to that described above.
+The following shows how to setup `package.json` to build and run development and production versions of an ExpressJS app with a client side app structure similar to that described above.
+
+* `npm run build` - bundles the client app
+* `npm run dev` - runs the dev server
+* `npm run prod` - bundles the client app and runs production mode server
 
 ```json
 {
@@ -179,8 +190,4 @@ The following shows how to setup package.json to build and run development and p
 
 (Note: `bash` is used for the production command because it supports setting the `NODE_ENV` variable on the command line.  If running on Windows you'll need `bash` on your path, or some other way to launch the server)
 
-To build or run:
 
-* `npm run build` - bundles the client app
-* `npm run dev` - runs the dev server
-* `npm run prod` - bundles the client app and runs production mode server
