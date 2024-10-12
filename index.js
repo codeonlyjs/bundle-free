@@ -47,12 +47,16 @@ export function bundleFree(options)
     let rxModule = null;
     if (options.modules)
     {
+        let prefix = options.prefix ?? "/";
+        if (!prefix.endsWith("/"))
+            prefix += "/";
+
         // Get the main file and add to the import map
         for (let m of options.modules)
         {
             let pkgDir = path.join(node_modules, m);
             let pkg = JSON.parse(readFileSync(path.join(pkgDir, "package.json")));
-            importMap.imports[m] = `/${m}/${pkg.main ?? "index.js"}`;
+            importMap.imports[m] = `${prefix}${m}/${pkg.main ?? "index.js"}`;
         }
 
         // Generate a regexp to match and path that starts with the name of a module
@@ -77,23 +81,41 @@ export function bundleFree(options)
             }
         }
 
+
         // Work out filename being requested
         let filename = req.path;
         if (filename == "/")
+        {
+            var originalUrl = url.parse(req.originalUrl);
+            if (!originalUrl.pathname.endsWith("/"))
+            {
+                originalUrl.pathname += "/";
+                let urlNew = url.format(originalUrl);
+                return res.redirect(urlNew);
+            }
             filename = "/index.html";
+        }
 
         // If it's a html file, inject the importmap so `import ... from "bare-module-name"` works.
         if (filename.match(/(?:.htm|.html)$/i))
         {
-            // Read the content
-            let content = await fs.readFile(path.join(options.path, filename), "utf8");
+            try
+            {
+                // Read the content
+                let content = await fs.readFile(path.join(options.path, filename), "utf8");
 
-            // Insert import map in the <head> block
-            content = content.replace("<head>", `<head>\n<script type="importmap">\n${JSON.stringify(importMap, null, 4)}\n</script>\n`);
+                // Insert import map in the <head> block
+                content = content.replace("<head>", `<head>\n<script type="importmap">\n${JSON.stringify(importMap, null, 4)}\n</script>\n`);
 
-            // Send it
-            res.send(content);
-            return;
+                // Send it
+                res.send(content);
+                return;
+            }
+            catch
+            {
+                // Probably file not found, pass it on
+                // fall through and keep looking in other middlewares
+            }
         }
 
         next();

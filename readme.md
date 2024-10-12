@@ -121,6 +121,30 @@ Also, other resources in those modules can be accessed directly
 <link href="@toptensoftware/module2/style.css" type="text/css" rel="stylesheet" />
 ```
 
+## Mounting in a sub-folder
+
+If you mount bundle-free on a sub-path, you need to include the `prefix`
+option so the generated import map includes the sub-path also:
+
+```js
+    app.use("/app", bundleFree({
+
+        // The location of the unbundled client app
+        path: path.join(__dirname, "client"),
+
+        // Include prefix on the generated import map
+        prefix: "/app"
+
+        // Modules to be made available to the unbundled app
+        modules: [ 
+            '@toptensoftware/module1',
+            '@toptensoftware/module2'
+        ]
+
+    }));
+```
+
+
 ## How it Works
 
 The middleware works as follows:
