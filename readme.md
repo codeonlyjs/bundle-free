@@ -98,9 +98,9 @@ else
 
         // Modules to be made available to the unbundled app
         modules: [ 
-            '@toptensoftware/module1',
-            '@toptensoftware/module2'
-        ]
+            '@toptensoftware/codeonly',
+            '@toptensoftware/framework'
+        ],
 
     }));
 }
@@ -123,17 +123,16 @@ Also, other resources in those modules can be accessed directly
 
 ## Mounting in a sub-folder
 
-If you mount bundle-free on a sub-path, you need to include the `prefix`
-option so the generated import map includes the sub-path also:
+To mount the app on a public sub-path include a `prefix` setting in the options.
 
 ```js
-    app.use("/app", bundleFree({
+    app.use(bundleFree({
 
         // The location of the unbundled client app
         path: path.join(__dirname, "client"),
 
         // Include prefix on the generated import map
-        prefix: "/app"
+        prefix: "/myapp"
 
         // Modules to be made available to the unbundled app
         modules: [ 
@@ -144,20 +143,74 @@ option so the generated import map includes the sub-path also:
     }));
 ```
 
+## Single Page Apps
+
+For single page apps that use the browser history API for navigation need to serve 
+the main `index.html` file for any URL that doesn't match a file in the client 
+directory.  (This allows the single-page app to handle full URL's client side such 
+as when refreshing the page in the browser).
+
+eg: if the page `http://somesite.com/myapp/products/productname` should be handled by 
+    the single page app at `/myapp/index.html`
+
+To support this, set the `spa` property to true:
+
+```js
+    app.use(bundleFree({
+
+        // The location of the unbundled client app
+        path: path.join(__dirname, "client"),
+
+        // Include prefix on the generated import map
+        prefix: "/myapp"
+
+        // Serve URLs that don't match a file as index.html
+        spa: true;
+
+        // Modules to be made available to the unbundled app
+        modules: [ 
+            '@toptensoftware/module1',
+            '@toptensoftware/module2'
+        ]
+
+    }));
+```
+
+Since you probably want this same behaviour for the production release, you can use
+bundle-free without the module remapping:
+
+```js
+    app.use(bundleFree({
+        path: path.join(__dirname, "client/dist"),
+        spa: true,
+        prefix: "/myapp",
+    }));
+```
+
+Finally, if the `/myapp/index.html` file references relative files you'll probably
+want to make them absolute too (otherwise they won't work in sub-path urls).
+
+eg: suppose `index.html` references `./main.js`, this won't work for a single page 
+app url at `/myapp/sub/sub/page` because `/myapp/sub/sub/main.js` doesn't exist.
+
+We can't just use an absolute URL in the index.html file because then the
+bundler won't find it.
+
+Use the `replace` option to work around this:
+
+```js
+    replace: [
+        { from: "./main.js", to: "/myapp/main.js" }
+    ],
+```
+
+`from` can be a string or regular expression.
 
 ## How it Works
 
 The middleware works as follows:
 
-1. Any url path that starts with the name of one of the specified modules is
-   re-written (ie: `req.url` is modified) with a `node_modules` prefix.
-
-   eg:
-       `/@toptensoftware/module1` 
-       
-   becomes `/node_modules/@toptensoftware/module1`
-
-2. An import map is generated for all listed modules and injected to the top of any
+1. An import map is generated for all listed modules and injected to the top of any
    `.html` file served from the client app folder.
 
    This lets us use bare module names in the browser.
@@ -177,12 +230,46 @@ The middleware works as follows:
 
     Note: the name of the `.js` file is determined from each modules's `package.json` file `main` setting.
 
-3. All files in the client app folder are served using Express' static file 
-   middleware
+    Also anything in the .html file that starts with a module name is prefixed with `/node_modules`.
 
-4. All files in the `node_modules` folder are served using Express' static file
+2. All files in the client app folder are served using Express' static file middleware.
+
+3. All files in the `node_modules` folder are served using Express' static file
    middleware mounted under `/node_modules` (so re-written URLs from step 1 above
    are served)
+
+
+## Complete Example
+
+Here's a complete example that supports production, development, single-page app
+mode and is mounted in a sub-path prefix:
+
+```js
+if (process.env.NODE_ENV == "production")
+{
+    app.use(bundleFree({
+        path: path.join(__dirname, "client/dist"),
+        spa: true,
+        prefix: "/myapp",
+    }));
+}
+else
+{
+    app.use(bundleFree({
+        path: path.join(__dirname, "client"),
+        spa: true,
+        prefix: "/myapp",
+        modules: [ 
+            '@toptensoftware/module1',
+            '@toptensoftware/module1'
+        ],
+        replace: [
+            { from: "./main.js", to: "/app/main.js" }
+        ],
+    }));
+}
+```
+
 
 ## Using Vite
 
@@ -200,7 +287,7 @@ The following shows how to setup `package.json` to build and run development and
     // Other stuff omitted
 
     "scripts": {
-        "build": "cd client && vite build",
+        "build": "cd client && vite build --base=/myapp/",
         "dev": "node server",
         "prod": "bash -c \"npm run build && NODE_ENV=production node server\""
     },

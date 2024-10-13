@@ -35,32 +35,36 @@ function escapeRegExp(string) {
 // Middleware for serving client side es6 module apps
 export function bundleFree(options)
 {
-    if (process.env.NODE_ENV == "production")
-    {
-        console.error("WARNING: clientApp not intended to be used in production environments.");
-    }
+    // Work out the app prefix where to mount
+    let prefix = options.prefix ?? "/";
+    if (!prefix.endsWith("/"))
+        prefix += "/";
 
     // Create import map to be injected into served html files
-    let importMap = {
-        imports: {},
-    };
-    let rxModule = null;
-    if (options.modules)
+    let importMap = null;
+    let rxModuleRef = null;
+    if (options.modules?.length > 0)
     {
-        let prefix = options.prefix ?? "/";
-        if (!prefix.endsWith("/"))
-            prefix += "/";
+        // Should only use this in development mode
+        if (process.env.NODE_ENV == "production")
+        {
+            console.error("WARNING: bundle-free module mapping is not intended to be used in production environments.");
+        }
+        
 
-        // Get the main file and add to the import map
+        // Generate import map
+        importMap = { imports: {} };
         for (let m of options.modules)
         {
             let pkgDir = path.join(node_modules, m);
             let pkg = JSON.parse(readFileSync(path.join(pkgDir, "package.json")));
-            importMap.imports[m] = `${prefix}${m}/${pkg.main ?? "index.js"}`;
+            importMap.imports[m] = `${prefix}node_modules/${m}/${pkg.main ?? "index.js"}`;
         }
 
-        // Generate a regexp to match and path that starts with the name of a module
-        rxModule = new RegExp(`^\/?(?:${options.modules.map(m => escapeRegExp(m)).join("|")})(\/.*)?$`, "");
+        // Generate a regexp to match anything in a .html file that looks like a reference
+        // to one of the listed modules
+        let rxModuleNames = `(?:${options.modules.map(m => escapeRegExp(m)).join("|")})`;
+        rxModuleRef = new RegExp(`([\\\'\\\"])(${rxModuleNames}\/)`, "g");
     }
 
 
@@ -68,19 +72,7 @@ export function bundleFree(options)
     let router = express.Router();
 
     // Handler to inject importmap into html files
-    router.use(async (req, res, next) => {
-
-        // See if path matches an exported module and if so
-        // re-write the url to /node_modules/...
-        if (rxModule)
-        {
-            let m = req.path.match(rxModule);
-            if (m)
-            {
-                req.url = "/node_modules" + req.url;
-            }
-        }
-
+    router.use(prefix, async (req, res, next) => {
 
         // Work out filename being requested
         let filename = req.path;
@@ -101,14 +93,7 @@ export function bundleFree(options)
         {
             try
             {
-                // Read the content
-                let content = await fs.readFile(path.join(options.path, filename), "utf8");
-
-                // Insert import map in the <head> block
-                content = content.replace("<head>", `<head>\n<script type="importmap">\n${JSON.stringify(importMap, null, 4)}\n</script>\n`);
-
-                // Send it
-                res.send(content);
+                await serve_html_file(req, res, path.join(options.path, filename));
                 return;
             }
             catch
@@ -122,10 +107,63 @@ export function bundleFree(options)
     });
 
     // Serve the client app folder
-    router.use(express.static(options.path));
+    router.use(prefix, express.static(options.path, { index: false }));
 
     // Serve the node_modules folder
-    router.use("/node_modules", express.static(node_modules));
+    router.use(`${prefix}node_modules`, express.static(node_modules, { index: false }));
+
+    // If still not found, patch the default html file (if this is an SPA app)
+    router.use(prefix, async (req, res, next) => {
+        if (options.spa)
+        {
+            try
+            {
+                await serve_html_file(req, res, path.join(options.path, options.default ?? "index.html"));
+                return;
+            }
+            catch
+            {
+                next();
+            }
+        }
+        else
+        {
+            next();
+        }
+    });
 
     return router;
+
+    async function serve_html_file(req, res, filename)
+    {
+        // Only patch if needed
+        if (rxModuleRef)
+        {
+            // Read the content
+            let content = await fs.readFile(filename, "utf8");
+
+            // Fix up non-relative paths to node modules
+            content = content.replace(rxModuleRef, (m, delim, module) => `${delim}${prefix}node_modules/${module}`);
+        
+            // Insert import map in the <head> block
+            content = content.replace("<head>", `<head>\n<script type="importmap">\n${JSON.stringify(importMap, null, 4)}\n</script>\n`);
+
+            // User replacements
+            if (options.replace)
+            {
+                for (let r of options.replace)
+                {
+                    let rx = typeof(r.from) === 'string' ? new RegExp(escapeRegExp(r.from), "g") : r.from;
+                    content = content.replace(rx, r.to);
+                }
+            }
+
+            // Send it
+            res.send(content);
+        }
+        else
+        {
+            res.sendFile(filename);
+        }
+    }
 }

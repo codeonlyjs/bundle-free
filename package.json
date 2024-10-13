@@ -1,6 +1,6 @@
 {
   "name": "@toptensoftware/bundle-free",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "ExpressJS middleware for using NPM packages client side without a bundler",
   "main": "index.js",
   "type": "module",
