@@ -158,6 +158,16 @@ export function bundleFree(options)
             // Insert import map in the <head> block
             content = content.replace("<head>", `<head>\n<script type="importmap">\n${JSON.stringify(importMap, null, 4)}\n</script>\n`);
 
+            if (options.livereload)
+            {
+                let port = typeof(options.livereload) === "Number" ? options.livereload : 35729; 
+                content = content.replace("</body>", `
+<script>
+    document.write('<script src="http://' + (location.host || 'localhost').split(':')[0] + ':${port}/livereload.js?snipver=1"></' + 'script>')
+</script>
+</body>`);
+            }
+
             // User replacements
             if (options.replace)
             {

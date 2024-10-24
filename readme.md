@@ -134,6 +134,43 @@ string in the modules list:
     ],
 ```
 
+## Live Reload Script
+
+Since bundle-free is patching `.html` files anyway, why not also patch in the 
+`livereload` script.
+
+By setting the `livereload` option to either `true` (to use the default livereload
+server port) or to port number, bundle-free will automatically insert the script
+at the bottom of the page.
+
+See `livereload` for more.  Only use this in development
+
+eg:
+
+```js
+    // npm install --save livereload
+    import livereload from 'livereload';
+
+    // omitted...
+
+    if (developmentMode)
+    {
+        // Development only
+        app.use(bundleFree({
+
+            // other settings omitted...
+
+            // Insert the live reload script
+            livereload: true,
+        }));
+
+        // Create live reload server and watch directories...
+        let lrs = livereload.createServer();
+        lrs.watch(path.join(__dirname, "client"));
+    }
+
+```
+
 
 ## Mounting in a sub-folder
 
@@ -156,6 +193,8 @@ To mount the app on a public sub-path include a `prefix` setting in the options.
 
     }));
 ```
+
+
 
 ## Single Page Apps
 
