@@ -99,7 +99,7 @@ else
         // Modules to be made available to the unbundled app
         modules: [ 
             '@toptensoftware/codeonly',
-            '@toptensoftware/framework'
+            '@toptensoftware/stylish'
         ],
 
     }));
@@ -120,6 +120,20 @@ Also, other resources in those modules can be accessed directly
 ```html
 <link href="@toptensoftware/module2/style.css" type="text/css" rel="stylesheet" />
 ```
+
+## Other Import Map Entries
+
+Since most browsers only support a single ES6 import map, if you need to specify
+other arbitary modules, use an object with `module` and `url` keys instead of a 
+string in the modules list:
+
+```js
+    modules: [ 
+        { module: '@toptensoftware/codeonly', url: "/mylibs/codeonly/codeonly.js" },
+        '@toptensoftware/stylish'
+    ],
+```
+
 
 ## Mounting in a sub-folder
 

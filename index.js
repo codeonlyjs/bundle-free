@@ -54,16 +54,26 @@ export function bundleFree(options)
 
         // Generate import map
         importMap = { imports: {} };
-        for (let m of options.modules)
+        for (let i=0; i<options.modules.length; i++)
         {
-            let pkgDir = path.join(node_modules, m);
-            let pkg = JSON.parse(readFileSync(path.join(pkgDir, "package.json")));
-            importMap.imports[m] = `${prefix}node_modules/${m}/${pkg.main ?? "index.js"}`;
+            let m = options.modules[i];
+            if (typeof(m) === 'string')
+            {
+                let pkgDir = path.join(node_modules, m);
+                let pkg = JSON.parse(readFileSync(path.join(pkgDir, "package.json")));
+                m = {
+                    module: m,
+                    url: `${prefix}node_modules/${m}/${pkg.main ?? "index.js"}`,
+                };
+                options.modules[i] = m
+            }
+
+            importMap.imports[m.module] = m.url;
         }
 
         // Generate a regexp to match anything in a .html file that looks like a reference
         // to one of the listed modules
-        let rxModuleNames = `(?:${options.modules.map(m => escapeRegExp(m)).join("|")})`;
+        let rxModuleNames = `(?:${options.modules.map(m => escapeRegExp(m.module)).join("|")})`;
         rxModuleRef = new RegExp(`([\\\'\\\"])(${rxModuleNames}\/)`, "g");
     }
 
