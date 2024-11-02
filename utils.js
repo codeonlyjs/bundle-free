@@ -7,14 +7,19 @@ import { existsSync } from 'node:fs';
 const __dirname = path.dirname(url.fileURLToPath(import.meta.url));
 
 // Find the node_modules folder 
+let found_node_modules = undefined;
 export function findNodeModulesRoot()
 {
+    // Already locations
+    if (found_node_modules != undefined)
+        return found_node_modules;
+
     let dir = __dirname;
     while (true)
     {
         let node_modules = path.join(dir, "node_modules");
         if (existsSync(node_modules))
-            return node_modules;
+            return found_node_modules = node_modules;
         let parentDir = path.dirname(dir);
         if (parentDir == dir)
         {
@@ -30,7 +35,8 @@ export function escapeRegExp(string) {
     return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-function pattern_to_regex(pattern)
+// Convert a URL pattern with * wildcards in to a regexp
+export function patternToRegex(pattern)
 {
     return new RegExp(`^${pattern.replace(/[.*+?^${}()|[\]\\]/g, (m) => {
         if (m == '*')
@@ -40,111 +46,23 @@ function pattern_to_regex(pattern)
     })}$`);
 }
 
-function match_exports(exports, exportName, conditions, pathMatch)
-{
-    if (typeof(exports) === 'string')
-    {
-        let target = exports;
-        if (pathMatch)
-            target = target.replace("*", pathMatch[1]);
-        else if (exportName != '.')
-            return null;
-        return target;
-    }
-
-    for (let k of Object.keys(exports))
-    {
-        if (k.startsWith("."))
-        {
-            pathMatch = exportName.match(pattern_to_regex(k));
-            if (pathMatch)
-                return match_exports(exports[k], exportName, conditions, pathMatch);
-        }
-    }
-
-    for (let c of conditions)
-    {
-        if (exports[c])
-        {
-            let match = match_exports(exports[c], exportName, conditions, pathMatch);
-            if (match)
-                return match;
-        }
-    }
-
-    if (exports.default)
-    {
-        let match = match_exports(exports.default, exportName, conditions, pathMatch);
-        if (match)
-            return match;
-    }
-
-    return null;
-}
-
-// Get the ESM preferred entry point to a package
-export function getPackageExport(pkg, exportName, conditions)
-{
-    if (!exportName || exportName == "" || exportName == "/")
-        exportName = ".";
-
-    if (pkg.exports)
-    {
-        return match_exports(pkg.exports, exportName, conditions, null);
-    }
-
-    if (exportName != ".")
-    {
-        if (conditions.indexOf("import") >= 0)
-        {
-            if (exportName.endsWith(".mjs") || pkg.type == "module")
-                return exportName;
-            else
-                return null;
-        }
-        if (conditions.indexOf("requires") >= 0)
-        {
-            if (exportName.endsWith(".cjs") || pkg.type != "module")
-                return exportName;
-            else
-                return null;
-        }
-        return exportName;
-    }
-
-    if (conditions.indexOf('import') >= 0)
-    {
-        if (pkg.module)
-            return pkg.module;
-        if (pkg.main)
-        {
-            if (pkg.main.endsWith(".mjs"))
-                return pkg.main;
-            if (pkg.main.endsWith(".js") && pkg.type == "module")
-                return pkg.main;
-        }
-    }
-
-    if (conditions.indexOf('require') >= 0)
-    {
-        if (pkg.main)
-        {
-            if (pkg.main.endsWith(".cjs"))
-                return pkg.main;
-            if (pkg.main.endsWith(".js") && (pkg.type === undefined || pkg.type == "commonjs"))
-                return pkg.main;
-        }
-
-        if (pkg.type === undefined || pkg.type === "commonjs")
-            return "index.js";
-    }
-
-    return null;
-}
-
+// Check if a pathname exists
 export function exists(pathname)
 {
     return fs.stat(pathname)
                 .then(() => true)
                 .catch(() => false);
+}
+
+
+export async function tryUnlink(pathname)
+{
+    try
+    {
+        await fs.unlink(pathname);
+    }
+    catch
+    {
+        // don't care
+    }
 }

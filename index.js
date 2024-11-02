@@ -1,42 +1,14 @@
 import fs from 'node:fs/promises';
-import crypto from 'node:crypto';
-import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import url from 'node:url';
 import express from 'express';
-import { findNodeModulesRoot, escapeRegExp, getPackageExport, exists } from "./utils.js";
+import { findNodeModulesRoot, escapeRegExp } from "./utils.js";
+import { getPackage, getPackageExport, isBarePackage, isModulePackage } from "./packageUtils.js";
 
+// Find the closest "node_modules"
 let node_modules = findNodeModulesRoot();
-let cache_dir = path.join(node_modules, "@toptensoftware", "bundle-free", "cache");
-let cache_url = `node_modules/@toptensoftware/bundle-free/cache`;
 
-let pkgMap = new Map();
-function getPackage(moduleName)
-{
-    let pkg = pkgMap.get(moduleName);
-    if (!pkg)
-    {
-        // Load package.json
-        let moduleDir = path.join(node_modules, moduleName);
-        pkg = JSON.parse(readFileSync(path.join(moduleDir, "package.json")));
 
-        // Add to map
-        pkgMap.set(moduleName, pkg);
-
-        // Build full list of dependencies
-        pkg.$all_deps = [];
-        if (pkg.dependencies)
-        {
-            for (let dep of Object.keys(pkg.dependencies))
-            {
-                let depPkg = getPackage(dep);
-                pkg.$all_deps.push(depPkg, ...depPkg.$all_deps);
-            }
-        }
-    }
-
-    return pkg;
-}
 
 // Middleware for serving client side es6 module apps
 export function bundleFree(options)
@@ -67,6 +39,7 @@ export function bundleFree(options)
         for (let i=0; i<options.modules.length; i++)
         {
             let m = options.modules[i];
+            
             // User import declaration?
             if (m.url)
             {
@@ -82,7 +55,19 @@ export function bundleFree(options)
             {
                 m.package = getPackage(m.module);
                 exported_modules.set(m.module, m.package);
-                m.package.$all_deps.forEach(x => exported_modules.set(x.name, x));
+
+                // Is this a module package?
+                if (isBarePackage(m.package) && isModulePackage(m.package))
+                {
+                    m.package.bundleMode = "bundle";
+                }
+                else
+                {
+                    for (let d of m.package.$all_deps)
+                    {
+                        exported_modules.set(d.name, d);
+                    }
+                }
             }
         }
 
@@ -116,61 +101,24 @@ export function bundleFree(options)
         {
             let pkg = exported_modules.get(m[1]);
 
-            let import_file = getPackageExport(pkg, m[2], [ "import" ]);
-            if (import_file)
+            if (pkg.bundleMode == "bundle")
             {
-                return res.redirect(`${base}node_modules/${m[1]}/${import_file}`);
+                let rollupModule = await import("./rollupModule.js");
+                let url = await rollupModule.rollupModule(pkg, ".", false);
+                req.url = base + url;
             }
             else
             {
-                try
+                let import_file = getPackageExport(pkg, m[2], [ "import" ]);
+                if (import_file)
                 {
-                    let src_file = getPackageExport(pkg, m[2], [ "require" ]);
-                    if (src_file)
-                    {
-                        let rollupModule = await import("./rollupModule.js");
-                        
-                        let cache_file = crypto
-                            .createHash('sha256')
-                            .update(`${pkg.name}/${pkg.version}/${src_file}`)
-                            .digest('hex') + ".js";
-                        let cache_path = path.join(cache_dir, cache_file);
-                       
-                        if (!await exists(cache_path))
-                        {
-                            // Make sure the cache folder exists
-                            if (!await exists(cache_dir))
-                            {
-                                await fs.mkdir(cache_dir, { recursive: true });
-                            }
-
-                            src_file = path.join(node_modules, pkg.name, src_file);
-
-                            let exports_path = path.join(cache_dir, `exports-${cache_file}`);
-                            let exports = await import("file://" + src_file);
-                            await fs.writeFile(exports_path, `export { ${Object.keys(exports).join(",")} } from ${JSON.stringify(src_file)}`, "utf8");
-
-                            try
-                            {
-
-                                await rollupModule.rollupModule(exports_path, cache_path);
-                            }
-                            finally
-                            {
-                                try
-                                {
-                                    fs.unlink(exports_path);
-                                }
-                                catch {}
-                            }
-                        }
-                        
-                        req.url = base + cache_url + "/" + cache_file;
-                    }
+                    return res.redirect(`${base}node_modules/${m[1]}/${import_file}`);
                 }
-                catch (err)
+                else
                 {
-                    debugger;
+                    let rollupModule = await import("./rollupModule.js");
+                    let url = await rollupModule.rollupModule(pkg, m[2]);
+                    req.url = base + url;
                 }
             }
         }
