@@ -19,5 +19,11 @@
     "type": "git",
     "url": "git+https://github.com/toptensoftware/bundle-free.git"
   },
-  "license": "Apache-2.0"
+  "license": "Apache-2.0",
+  "devDependencies": {
+    "@rollup/plugin-commonjs": "^28.0.1",
+    "@rollup/plugin-json": "^6.1.0",
+    "@rollup/plugin-node-resolve": "^15.3.0",
+    "rollup": "^4.24.3"
+  }
 }

@@ -1,48 +1,55 @@
 import fs from 'node:fs/promises';
-import { existsSync, readFileSync } from 'node:fs';
+import crypto from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import url from 'node:url';
 import express from 'express';
+import { findNodeModulesRoot, escapeRegExp, getPackageExport, exists } from "./utils.js";
 
-// Path to self
-const __dirname = path.dirname(url.fileURLToPath(import.meta.url));
+let node_modules = findNodeModulesRoot();
+let cache_dir = path.join(node_modules, "@toptensoftware", "bundle-free", "cache");
+let cache_url = `node_modules/@toptensoftware/bundle-free/cache`;
 
-// Find the node_modules folder 
-function find_node_modules()
+let pkgMap = new Map();
+function getPackage(moduleName)
 {
-    let dir = __dirname;
-    while (true)
+    let pkg = pkgMap.get(moduleName);
+    if (!pkg)
     {
-        let node_modules = path.join(dir, "node_modules");
-        if (existsSync(node_modules))
-            return node_modules;
-        let parentDir = path.dirname(dir);
-        if (parentDir == dir)
+        // Load package.json
+        let moduleDir = path.join(node_modules, moduleName);
+        pkg = JSON.parse(readFileSync(path.join(moduleDir, "package.json")));
+
+        // Add to map
+        pkgMap.set(moduleName, pkg);
+
+        // Build full list of dependencies
+        pkg.$all_deps = [];
+        if (pkg.dependencies)
         {
-            throw new Error("Failed to locate node_modules");
+            for (let dep of Object.keys(pkg.dependencies))
+            {
+                let depPkg = getPackage(dep);
+                pkg.$all_deps.push(depPkg, ...depPkg.$all_deps);
+            }
         }
-        dir = parentDir;
     }
-}
 
-let node_modules = find_node_modules();
-
-// Helper to escape a string for use in a regular expression
-function escapeRegExp(string) {
-    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return pkg;
 }
 
 // Middleware for serving client side es6 module apps
 export function bundleFree(options)
 {
-    // Work out the app prefix where to mount
-    let prefix = options.prefix ?? "/";
-    if (!prefix.endsWith("/"))
-        prefix += "/";
+    // Work out the app base where to mount
+    let base = options.base ?? "/";
+    if (!base.endsWith("/"))
+        base += "/";
 
     // Create import map to be injected into served html files
     let importMap = null;
     let rxModuleRef = null;
+    let exported_modules = new Map();
     if (options.modules?.length > 0)
     {
         // Should only use this in development mode
@@ -51,38 +58,122 @@ export function bundleFree(options)
             console.error("WARNING: bundle-free module mapping is not intended to be used in production environments.");
         }
         
+        importMap = {
+            imports: {
+            },
+        } 
 
-        // Generate import map
-        importMap = { imports: {} };
+        // Generate import map with all specified and dependant modules
         for (let i=0; i<options.modules.length; i++)
         {
             let m = options.modules[i];
-            if (typeof(m) === 'string')
+            // User import declaration?
+            if (m.url)
             {
-                let pkgDir = path.join(node_modules, m);
-                let pkg = JSON.parse(readFileSync(path.join(pkgDir, "package.json")));
-                m = {
-                    module: m,
-                    url: `${prefix}node_modules/${m}/${pkg.main ?? "index.js"}`,
-                };
-                options.modules[i] = m
+                importMap.imports[m.module] = m.url;
             }
 
-            importMap.imports[m.module] = m.url;
+            if (typeof(m) === 'string')
+            {
+                options.modules[i] = m = { module: m }
+            }
+
+            if (m.module)
+            {
+                m.package = getPackage(m.module);
+                exported_modules.set(m.module, m.package);
+                m.package.$all_deps.forEach(x => exported_modules.set(x.name, x));
+            }
+        }
+
+        // Add module imports to import map
+        // (add both bare name and '/' path name)
+        for (let [k,b] of exported_modules.entries())
+        {
+            importMap.imports[k] = `${base}node_modules/bundle-free/${k}`;
+            importMap.imports[`${k}/`] = `${base}node_modules/bundle-free/${k}/`;
         }
 
         // Generate a regexp to match anything in a .html file that looks like a reference
         // to one of the listed modules
-        let rxModuleNames = `(?:${options.modules.map(m => escapeRegExp(m.module)).join("|")})`;
+        let moduleNames = options.modules
+                                .filter(x => !!x.module)
+                                .map(m => escapeRegExp(m.module))
+        let rxModuleNames = `(?:${moduleNames.join("|")})`;
         rxModuleRef = new RegExp(`([\\\'\\\"])(${rxModuleNames}\/)`, "g");
     }
-
 
     // Create a router
     let router = express.Router();
 
-    // Handler to inject importmap into html files
-    router.use(prefix, async (req, res, next) => {
+    // Handler to rewrite node_module paths and inject
+    // import maps and replacements into html files
+    router.use(base, async (req, res, next) => {
+
+        // Is it a module request?
+        let m = req.path.match(/^\/node_modules\/bundle-free\/([^\/]+)(\/.*)?$/);
+        if (m)
+        {
+            let pkg = exported_modules.get(m[1]);
+
+            let import_file = getPackageExport(pkg, m[2], [ "import" ]);
+            if (import_file)
+            {
+                return res.redirect(`${base}node_modules/${m[1]}/${import_file}`);
+            }
+            else
+            {
+                try
+                {
+                    let src_file = getPackageExport(pkg, m[2], [ "require" ]);
+                    if (src_file)
+                    {
+                        let rollupModule = await import("./rollupModule.js");
+                        
+                        let cache_file = crypto
+                            .createHash('sha256')
+                            .update(`${pkg.name}/${pkg.version}/${src_file}`)
+                            .digest('hex') + ".js";
+                        let cache_path = path.join(cache_dir, cache_file);
+                       
+                        if (!await exists(cache_path))
+                        {
+                            // Make sure the cache folder exists
+                            if (!await exists(cache_dir))
+                            {
+                                await fs.mkdir(cache_dir, { recursive: true });
+                            }
+
+                            src_file = path.join(node_modules, pkg.name, src_file);
+
+                            let exports_path = path.join(cache_dir, `exports-${cache_file}`);
+                            let exports = await import("file://" + src_file);
+                            await fs.writeFile(exports_path, `export { ${Object.keys(exports).join(",")} } from ${JSON.stringify(src_file)}`, "utf8");
+
+                            try
+                            {
+
+                                await rollupModule.rollupModule(exports_path, cache_path);
+                            }
+                            finally
+                            {
+                                try
+                                {
+                                    fs.unlink(exports_path);
+                                }
+                                catch {}
+                            }
+                        }
+                        
+                        req.url = base + cache_url + "/" + cache_file;
+                    }
+                }
+                catch (err)
+                {
+                    debugger;
+                }
+            }
+        }
 
         // Work out filename being requested
         let filename = req.path;
@@ -117,13 +208,13 @@ export function bundleFree(options)
     });
 
     // Serve the client app folder
-    router.use(prefix, express.static(options.path, { index: false }));
+    router.use(base, express.static(options.path, { index: false }));
 
     // Serve the node_modules folder
-    router.use(`${prefix}node_modules`, express.static(node_modules, { index: false }));
+    router.use(`${base}node_modules`, express.static(node_modules, { index: false }));
 
     // If still not found, patch the default html file (if this is an SPA app)
-    router.use(prefix, async (req, res, next) => {
+    router.use(base, async (req, res, next) => {
         if (options.spa)
         {
             try
@@ -153,7 +244,7 @@ export function bundleFree(options)
             let content = await fs.readFile(filename, "utf8");
 
             // Fix up non-relative paths to node modules
-            content = content.replace(rxModuleRef, (m, delim, module) => `${delim}${prefix}node_modules/${module}`);
+            content = content.replace(rxModuleRef, (m, delim, module) => `${delim}${base}node_modules/${module}`);
         
             // Insert import map in the <head> block
             content = content.replace("<head>", `<head>\n<script type="importmap">\n${JSON.stringify(importMap, null, 4)}\n</script>\n`);
