@@ -44,13 +44,13 @@ app.use("/node_modules", express.static(path.join(__dirname, "node_modules")));
 and then reference them client side as:
 
 ```js
-import * from "/node_modules/@toptensoftware/module1/index.js"
+import * from "/node_modules/@scoped/module1/index.js"
 ```
 
 This works, but when it comes time to bundle for distribution, the bundler isn't going to understand import directives and prefers the bare name of the module:
 
 ```js
-import * from "@toptensoftware/module1"
+import * from "@scoped/module1"
 ```
 
 BundleFree lets you use the bare name even when running unbundled during development.
@@ -59,7 +59,7 @@ BundleFree lets you use the bare name even when running unbundled during develop
 ## Install
 
 ```
-npm install --save @toptensoftware/bundle-free
+npm install --save codeonlyjs/bundle-free
 ```
 
 ## Usage
@@ -77,7 +77,7 @@ available in the `./client/dist` folder.
 First, import the middleware:
 
 ```js
-import { bundleFree } from '@toptensoftware/bundle-free.js';
+import { bundleFree } from '@codeonlyjs/bundle-free';
 ```
 
 Next, "use" the middleware:
@@ -98,8 +98,8 @@ else
 
         // Modules to be made available to the unbundled app
         modules: [ 
-            '@toptensoftware/codeonly',
-            '@toptensoftware/stylish'
+            '@scoped/package1',
+            'package2'
         ],
 
     }));
@@ -112,13 +112,13 @@ modules listed in the `modules` option.
 ```js
 // Client side script files can now import directly from the bare
 // module name:
-import * from '@toptensoftware/module1';
+import * from '@scoped/package1';
 ```
 
 Also, other resources in those modules can be accessed directly
 
 ```html
-<link href="@toptensoftware/module2/style.css" type="text/css" rel="stylesheet" />
+<link href="@scoped/package1/style.css" type="text/css" rel="stylesheet" />
 ```
 
 ## Other Import Map Entries
@@ -129,8 +129,8 @@ string in the modules list:
 
 ```js
     modules: [ 
-        { module: '@toptensoftware/codeonly', url: "/mylibs/codeonly/codeonly.js" },
-        '@toptensoftware/stylish'
+        { module: '@scoped/package', url: "/mylibs/package/index.js" },
+        'package2'
     ],
 ```
 
@@ -187,8 +187,8 @@ To mount the app on a public sub-path include a `prefix` setting in the options.
 
         // Modules to be made available to the unbundled app
         modules: [ 
-            '@toptensoftware/module1',
-            '@toptensoftware/module2'
+            '@scoped/module1',
+            '@scoped/module2'
         ]
 
     }));
@@ -222,8 +222,8 @@ To support this, set the `spa` property to true:
 
         // Modules to be made available to the unbundled app
         modules: [ 
-            '@toptensoftware/module1',
-            '@toptensoftware/module2'
+            '@scoped/module1',
+            '@scoped/module2'
         ]
 
     }));
@@ -259,37 +259,6 @@ Use the `replace` option to work around this:
 
 `from` can be a string or regular expression.
 
-## How it Works
-
-The middleware works as follows:
-
-1. An import map is generated for all listed modules and injected to the top of any
-   `.html` file served from the client app folder.
-
-   This lets us use bare module names in the browser.
-
-   eg:
-        
-    ```html
-    <script type="importmap">
-    {
-        "imports": {
-            "@toptensoftware/module1": "/@toptensoftware/module1/./main.js",
-            "@toptensoftware/module2": "/@toptensoftware/module2/./index.js"
-        }
-    }
-    </script>
-    ```
-
-    Note: the name of the `.js` file is determined from each modules's `package.json` file `main` setting.
-
-    Also anything in the .html file that starts with a module name is prefixed with `/node_modules`.
-
-2. All files in the client app folder are served using Express' static file middleware.
-
-3. All files in the `node_modules` folder are served using Express' static file
-   middleware mounted under `/node_modules` (so re-written URLs from step 1 above
-   are served)
 
 
 ## Complete Example
@@ -313,8 +282,8 @@ else
         spa: true,
         prefix: "/myapp",
         modules: [ 
-            '@toptensoftware/module1',
-            '@toptensoftware/module1'
+            '@scoped/module1',
+            '@scoped/module2'
         ],
         replace: [
             { from: "./main.js", to: "/app/main.js" }

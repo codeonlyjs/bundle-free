@@ -10,8 +10,8 @@ import { getPackageExport } from './packageUtils.js';
 
 // Work out the cache directory as both file path and a URL
 let node_modules = findNodeModulesRoot();
-let cache_dir = path.join(node_modules, "@toptensoftware", "bundle-free", "cache");
-let cache_url = `node_modules/@toptensoftware/bundle-free/cache`;
+let cache_dir = path.join(node_modules, "@codeonlyjs", "bundle-free", "cache");
+let cache_url = `node_modules/@codeonlyjs/bundle-free/cache`;
 
 
 // Rollup a module

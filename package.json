@@ -1,5 +1,5 @@
 {
-  "name": "@toptensoftware/bundle-free",
+  "name": "@codeonlyjs/bundle-free",
   "version": "1.0.7",
   "description": "ExpressJS middleware for using NPM packages client side without a bundler",
   "main": "index.js",
