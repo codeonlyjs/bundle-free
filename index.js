@@ -96,7 +96,7 @@ export function bundleFree(options)
     router.use(base, async (req, res, next) => {
 
         // Is it a module request?
-        let m = req.path.match(/^\/node_modules\/bundle-free\/([^\/]+)(\/.*)?$/);
+        let m = req.path.match(/^\/node_modules\/bundle-free\/((?:@[^\/]+\/)?[^\/]+)(\/.*)?$/);
         if (m)
         {
             let pkg = exported_modules.get(m[1]);
