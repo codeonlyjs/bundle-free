@@ -134,7 +134,7 @@ export function bundleFree(options)
                 let urlNew = url.format(originalUrl);
                 return res.redirect(urlNew);
             }
-            filename = "/index.html";
+            filename = "/" + (options.default ?? "index.html");
         }
 
         // If it's a html file, inject the importmap so `import ... from "bare-module-name"` works.
