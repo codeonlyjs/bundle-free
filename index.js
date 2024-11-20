@@ -2,7 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import url from 'node:url';
 import express from 'express';
-import { findNodeModulesRoot, escapeRegExp } from "./utils.js";
+import { findNodeModulesRoot, escapeRegExp, thisDir, } from "./utils.js";
 import { getPackage, getPackageExport, isBarePackage, isModulePackage } from "./packageUtils.js";
 
 // Find the closest "node_modules"
@@ -158,6 +158,9 @@ export function bundleFree(options)
     // Serve the client app folder
     router.use(base, express.static(options.path, { index: false }));
 
+    // Also serve our public files
+    router.use(express.static(path.join(thisDir(), "public"), { index: false }));
+
     // Serve the node_modules folder
     router.use(`${base}node_modules`, express.static(node_modules, { index: false }));
 
@@ -196,6 +199,10 @@ export function bundleFree(options)
         
             // Insert import map in the <head> block
             content = content.replace("<head>", `<head>\n<script type="importmap">\n${JSON.stringify(importMap, null, 4)}\n</script>\n`);
+            
+            // In ya face?
+            if (options.inYaFace)
+                content = content.replace("<head>", `<head>\n<script src="/inYaFace.js"></script>\n`);
 
             if (options.livereload)
             {

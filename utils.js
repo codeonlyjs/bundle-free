@@ -6,6 +6,11 @@ import { existsSync } from 'node:fs';
 // Path to self
 const __dirname = path.dirname(url.fileURLToPath(import.meta.url));
 
+export function thisDir()
+{
+    return __dirname;
+}
+
 // Find the node_modules folder 
 let found_node_modules = undefined;
 export function findNodeModulesRoot()
