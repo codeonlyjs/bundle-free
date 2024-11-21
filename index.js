@@ -16,6 +16,11 @@ export function bundleFree(options)
     if (!options.node_modules)
         options.node_modules = findNodeModules();
 
+    // Work out the app base where to mount
+    let base = options.base ?? "/";
+    if (!base.endsWith("/"))
+        base += "/";
+
     // Create import map to be injected into served html files
     let importMap = null;
     let rxModuleRef = null;
@@ -73,8 +78,8 @@ export function bundleFree(options)
         // (add both bare name and '/' path name)
         for (let [k,b] of exported_modules.entries())
         {
-            importMap.imports[k] = `/node_modules/bundle-free/${k}`;
-            importMap.imports[`${k}/`] = `/node_modules/bundle-free/${k}/`;
+            importMap.imports[k] = `${base}node_modules/bundle-free/${k}`;
+            importMap.imports[`${k}/`] = `${base}node_modules/bundle-free/${k}/`;
         }
 
         // Generate a regexp to match anything in a .html file that looks like a reference
@@ -91,7 +96,7 @@ export function bundleFree(options)
 
     // Handler to rewrite node_module paths and inject
     // import maps and replacements into html files
-    router.use("/", async (req, res, next) => {
+    router.use(base, async (req, res, next) => {
 
         // Is it a module request?
         let m = req.path.match(/^\/node_modules\/bundle-free\/((?:@[^\/]+\/)?[^\/]+)(\/.*)?$/);
@@ -103,20 +108,20 @@ export function bundleFree(options)
             {
                 let rollupModule = await import("./rollupModule.js");
                 let url = await rollupModule.rollupModule(options, pkg, ".", false);
-                req.url = "/" + url;
+                req.url = base + url;
             }
             else
             {
                 let import_file = getPackageExport(pkg, m[2], [ "import" ]);
                 if (import_file)
                 {
-                    return res.redirect(`/node_modules/${m[1]}/${import_file}`);
+                    return res.redirect(`${base}node_modules/${m[1]}/${import_file}`);
                 }
                 else
                 {
                     let rollupModule = await import("./rollupModule.js");
                     let url = await rollupModule.rollupModule(options, pkg, m[2]);
-                    req.url = "/" + url;
+                    req.url = base + url;
                 }
             }
         }
@@ -154,7 +159,7 @@ export function bundleFree(options)
     });
 
     // Serve the client app folder
-    router.use("/", express.static(options.path, { index: false }));
+    router.use(base, express.static(options.path, { index: false }));
 
     // Also serve our public files
     if (options.inYaFace)
@@ -163,10 +168,10 @@ export function bundleFree(options)
     }
 
     // Serve the node_modules folder
-    router.use(`/node_modules`, express.static(options.node_modules, { index: false }));
+    router.use(`${base}node_modules`, express.static(options.node_modules, { index: false }));
 
     // If still not found, patch the default html file (if this is an SPA app)
-    router.use("/", async (req, res, next) => {
+    router.use(base, async (req, res, next) => {
         if (options.spa)
         {
             try
@@ -196,7 +201,7 @@ export function bundleFree(options)
             let content = await fs.readFile(filename, "utf8");
 
             // Fix up non-relative paths to node modules
-            content = content.replace(rxModuleRef, (m, delim, module) => `${delim}/node_modules/${module}`);
+            content = content.replace(rxModuleRef, (m, delim, module) => `${delim}${base}node_modules/${module}`);
         
             // Insert import map in the <head> block
             content = content.replace("<head>", `<head>\n<script type="importmap">\n${JSON.stringify(importMap, null, 4)}\n</script>\n`);
