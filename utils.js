@@ -6,25 +6,21 @@ import { existsSync } from 'node:fs';
 // Path to self
 const __dirname = path.dirname(url.fileURLToPath(import.meta.url));
 
+// Return self directory
 export function thisDir()
 {
     return __dirname;
 }
 
 // Find the node_modules folder 
-let found_node_modules = undefined;
-export function findNodeModulesRoot()
+export function findNodeModules()
 {
-    // Already locations
-    if (found_node_modules != undefined)
-        return found_node_modules;
-
     let dir = __dirname;
     while (true)
     {
         let node_modules = path.join(dir, "node_modules");
         if (existsSync(node_modules))
-            return found_node_modules = node_modules;
+            return node_modules;
         let parentDir = path.dirname(dir);
         if (parentDir == dir)
         {
@@ -33,7 +29,6 @@ export function findNodeModulesRoot()
         dir = parentDir;
     }
 }
-
 
 // Helper to escape a string for use in a regular expression
 export function escapeRegExp(string) {
@@ -59,7 +54,7 @@ export function exists(pathname)
                 .catch(() => false);
 }
 
-
+// Try to unlink a file, ignore if can't
 export async function tryUnlink(pathname)
 {
     try

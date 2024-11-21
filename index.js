@@ -2,21 +2,19 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import url from 'node:url';
 import express from 'express';
-import { findNodeModulesRoot, escapeRegExp, thisDir, } from "./utils.js";
+import { findNodeModules, escapeRegExp, thisDir, } from "./utils.js";
 import { getPackage, getPackageExport, isBarePackage, isModulePackage } from "./packageUtils.js";
-
-// Find the closest "node_modules"
-let node_modules = findNodeModulesRoot();
-
 
 
 // Middleware for serving client side es6 module apps
 export function bundleFree(options)
 {
-    // Work out the app base where to mount
-    let base = options.base ?? "/";
-    if (!base.endsWith("/"))
-        base += "/";
+    // Clone options
+    options = Object.assign({}, options);
+
+    // Find node modules if not specified
+    if (!options.node_modules)
+        options.node_modules = findNodeModules();
 
     // Create import map to be injected into served html files
     let importMap = null;
@@ -53,7 +51,7 @@ export function bundleFree(options)
 
             if (m.module)
             {
-                m.package = getPackage(m.module);
+                m.package = getPackage(options, m.module);
                 exported_modules.set(m.module, m.package);
 
                 // Is this a module package?
@@ -75,8 +73,8 @@ export function bundleFree(options)
         // (add both bare name and '/' path name)
         for (let [k,b] of exported_modules.entries())
         {
-            importMap.imports[k] = `${base}node_modules/bundle-free/${k}`;
-            importMap.imports[`${k}/`] = `${base}node_modules/bundle-free/${k}/`;
+            importMap.imports[k] = `/node_modules/bundle-free/${k}`;
+            importMap.imports[`${k}/`] = `/node_modules/bundle-free/${k}/`;
         }
 
         // Generate a regexp to match anything in a .html file that looks like a reference
@@ -93,7 +91,7 @@ export function bundleFree(options)
 
     // Handler to rewrite node_module paths and inject
     // import maps and replacements into html files
-    router.use(base, async (req, res, next) => {
+    router.use("/", async (req, res, next) => {
 
         // Is it a module request?
         let m = req.path.match(/^\/node_modules\/bundle-free\/((?:@[^\/]+\/)?[^\/]+)(\/.*)?$/);
@@ -104,21 +102,21 @@ export function bundleFree(options)
             if (pkg.bundleMode == "bundle")
             {
                 let rollupModule = await import("./rollupModule.js");
-                let url = await rollupModule.rollupModule(pkg, ".", false);
-                req.url = base + url;
+                let url = await rollupModule.rollupModule(options, pkg, ".", false);
+                req.url = "/" + url;
             }
             else
             {
                 let import_file = getPackageExport(pkg, m[2], [ "import" ]);
                 if (import_file)
                 {
-                    return res.redirect(`${base}node_modules/${m[1]}/${import_file}`);
+                    return res.redirect(`/node_modules/${m[1]}/${import_file}`);
                 }
                 else
                 {
                     let rollupModule = await import("./rollupModule.js");
-                    let url = await rollupModule.rollupModule(pkg, m[2]);
-                    req.url = base + url;
+                    let url = await rollupModule.rollupModule(options, pkg, m[2]);
+                    req.url = "/" + url;
                 }
             }
         }
@@ -134,7 +132,7 @@ export function bundleFree(options)
                 let urlNew = url.format(originalUrl);
                 return res.redirect(urlNew);
             }
-            filename = "/" + (options.default ?? "index.html");
+            filename = "/" + resolveDefault(req, res);
         }
 
         // If it's a html file, inject the importmap so `import ... from "bare-module-name"` works.
@@ -156,21 +154,24 @@ export function bundleFree(options)
     });
 
     // Serve the client app folder
-    router.use(base, express.static(options.path, { index: false }));
+    router.use("/", express.static(options.path, { index: false }));
 
     // Also serve our public files
-    router.use(express.static(path.join(thisDir(), "public"), { index: false }));
+    if (options.inYaFace)
+    {
+        router.use(express.static(path.join(thisDir(), "public"), { index: false }));
+    }
 
     // Serve the node_modules folder
-    router.use(`${base}node_modules`, express.static(node_modules, { index: false }));
+    router.use(`/node_modules`, express.static(options.node_modules, { index: false }));
 
     // If still not found, patch the default html file (if this is an SPA app)
-    router.use(base, async (req, res, next) => {
+    router.use("/", async (req, res, next) => {
         if (options.spa)
         {
             try
             {
-                await serve_html_file(req, res, path.join(options.path, options.default ?? "index.html"));
+                await serve_html_file(req, res, path.join(options.path, resolveDefault(req, res)));
                 return;
             }
             catch
@@ -195,7 +196,7 @@ export function bundleFree(options)
             let content = await fs.readFile(filename, "utf8");
 
             // Fix up non-relative paths to node modules
-            content = content.replace(rxModuleRef, (m, delim, module) => `${delim}${base}node_modules/${module}`);
+            content = content.replace(rxModuleRef, (m, delim, module) => `${delim}/node_modules/${module}`);
         
             // Insert import map in the <head> block
             content = content.replace("<head>", `<head>\n<script type="importmap">\n${JSON.stringify(importMap, null, 4)}\n</script>\n`);
@@ -231,5 +232,14 @@ export function bundleFree(options)
         {
             res.sendFile(filename);
         }
+    }
+
+    function resolveDefault(req, res)
+    {
+        if (options.default instanceof Function)
+        {
+            return options.default(req, res);
+        }
+        return options.default ?? "index.html";
     }
 }

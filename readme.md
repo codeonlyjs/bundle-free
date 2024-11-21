@@ -309,7 +309,7 @@ The following shows how to setup `package.json` to build and run development and
     // Other stuff omitted
 
     "scripts": {
-        "build": "cd client && vite build --base=/myapp/",
+        "build": "cd client && vite build",
         "dev": "node server",
         "prod": "bash -c \"npm run build && NODE_ENV=production node server\""
     },

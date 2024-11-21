@@ -1,18 +1,26 @@
 import crypto from 'node:crypto';
 import path from 'node:path';
 import fs from 'node:fs/promises';
-import { rollup } from 'rollup';
-import { nodeResolve } from '@rollup/plugin-node-resolve';
-import commonjs from '@rollup/plugin-commonjs'
-import json from '@rollup/plugin-json';
-import { findNodeModulesRoot, tryUnlink, exists } from './utils.js';
+import { tryUnlink, exists } from './utils.js';
 import { getPackageExport } from './packageUtils.js';
 
-// Work out the cache directory as both file path and a URL
-let node_modules = findNodeModulesRoot();
-let cache_dir = path.join(node_modules, "@codeonlyjs", "bundle-free", "cache");
-let cache_url = `node_modules/@codeonlyjs/bundle-free/cache`;
+let rollup;
+let nodeResolve;
+let commonjs;
+let json;
 
+// Delay load rollup and plugins.
+async function tryLoadRollup()
+{
+    // Already loaded?
+    if (rollup)
+        return;
+
+    rollup = (await import('rollup')).rollup;
+    nodeResolve = (await import('@rollup/plugin-node-resolve')).nodeResolve;
+    commonjs = await import('@rollup/plugin-commonjs');
+    json = await import('@rollup/plugin-json');
+}
 
 // Rollup a module
 async function runRollup(entryPoint, outputFile) {
@@ -41,10 +49,20 @@ async function runRollup(entryPoint, outputFile) {
 	}
 }
 
-export async function rollupModule(pkg, exportPath, exportWrapper)
+// rollup a CJS module to make it available as an ES6 module
+// - options - bundle-free options
+// - pkg - the package to rollup
+// - exportPath - the path within the package to rollup
+// - exportWrapper - whether to generate an export wrapper that
+//   exports all the symbols as ES6 exports.
+export async function rollupModule(options, pkg, exportPath, exportWrapper)
 {
     try
     {
+        // Work out the cache directory as both a file path and a URL
+        let cache_dir = path.join(options.node_modules, "@codeonlyjs", "bundle-free", "cache");
+        let cache_url = `node_modules/@codeonlyjs/bundle-free/cache`;
+
         // Get the exported file
         let src_file = getPackageExport(pkg, exportPath, exportWrapper ? [ "require" ] : [ "import" ]);
         if (!src_file)
@@ -65,9 +83,13 @@ export async function rollupModule(pkg, exportPath, exportWrapper)
         if (!await exists(cache_dir))
             await fs.mkdir(cache_dir, { recursive: true });
 
-        // Work out full path to the import file
-        src_file = path.join(node_modules, pkg.name, src_file);
+        // Load rollup
+        await tryLoadRollup();
 
+        // Work out full path to the import file
+        src_file = path.join(options.node_modules, pkg.name, src_file);
+
+        // Create an export wrapper?
         let export_wrapper_file;
         if (exportWrapper)
         {

@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { readFileSync } from 'node:fs';
-import { findNodeModulesRoot, patternToRegex } from "./utils.js";
+import { patternToRegex } from "./utils.js";
 
 // Helper to walk the tree of package.json "exports" keys
 // looking for a match
@@ -126,23 +126,23 @@ export function getPackageExport(pkg, exportName, conditions)
 }
 
 
-// Cache of previously loaded module infos
-let pkgMap = new Map();
-
 // Get the package file for a module
-export function getPackage(moduleName)
+export function getPackage(options, moduleName)
 {
+    if (!options.pkgMap)
+        options.pkgMap = new Map();
+
     // Check if already loaded
-    let pkg = pkgMap.get(moduleName);
+    let pkg = options.pkgMap.get(moduleName);
     if (pkg)
         return pkg;
 
     // Load package.json
-    let moduleDir = path.join(findNodeModulesRoot(), moduleName);
+    let moduleDir = path.join(options.node_modules, moduleName);
     pkg = JSON.parse(readFileSync(path.join(moduleDir, "package.json")));
 
     // Add to map
-    pkgMap.set(moduleName, pkg);
+    options.pkgMap.set(moduleName, pkg);
 
     // Build full list of dependencies
     pkg.$all_deps = [];
@@ -150,7 +150,7 @@ export function getPackage(moduleName)
     {
         for (let dep of Object.keys(pkg.dependencies))
         {
-            let depPkg = getPackage(dep);
+            let depPkg = getPackage(options, dep);
             pkg.$all_deps.push(depPkg, ...depPkg.$all_deps);
         }
     }
