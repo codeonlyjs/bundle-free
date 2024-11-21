@@ -94,6 +94,9 @@
     
     async function showError(ev) 
     {
+        if (!ev.error)
+            return;
+
         // Don't show more than once at a time...
         if (div)
         {
