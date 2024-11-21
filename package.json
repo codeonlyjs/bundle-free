@@ -1,6 +1,6 @@
 {
   "name": "@codeonlyjs/bundle-free",
-  "version": "1.0.15",
+  "version": "1.0.16",
   "description": "ExpressJS middleware for using NPM packages client side without a bundler",
   "main": "index.js",
   "type": "module",
