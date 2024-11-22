@@ -67,7 +67,9 @@ export function getPackageExport(pkg, exportName, conditions)
     // Root or bare module name?
     if (!exportName || exportName == "" || exportName == "/")
         exportName = ".";
-
+    else if (!exportName.startsWith("."))
+        exportName = "." + exportName;
+    
     // Use exports key if specified
     if (pkg.exports)
     {
