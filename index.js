@@ -32,11 +32,13 @@ export function bundleFree(options)
     }
 
     // Create import map to be injected into served html files
-    let importMap = null;
+    let imports = null;
     let rxModuleRef = null;
     let exported_modules = new Map();
     if (options.modules?.length > 0)
-    {
+    {        
+        imports = {};
+
         // Should only use this in development mode
         if (process.env.NODE_ENV == "production")
         {
@@ -47,11 +49,6 @@ export function bundleFree(options)
         if (!options.node_modules)
             options.node_modules = findNodeModules();
 
-        importMap = {
-            imports: {
-            },
-        } 
-
         // Generate import map with all specified and dependant modules
         for (let i=0; i<options.modules.length; i++)
         {
@@ -60,7 +57,7 @@ export function bundleFree(options)
             // User import declaration?
             if (m.url)
             {
-                importMap.imports[m.module] = m.url;
+                imports[m.module] = m.url;
             }
 
             if (typeof(m) === 'string')
@@ -92,8 +89,8 @@ export function bundleFree(options)
         // (add both bare name and '/' path name)
         for (let [k,b] of exported_modules.entries())
         {
-            importMap.imports[k] = `{{base}}node_modules/bundle-free/${k}`;
-            importMap.imports[`${k}/`] = `{{base}}node_modules/bundle-free/${k}/`;
+            imports[k] = `{{base}}node_modules/bundle-free/${k}`;
+            imports[`${k}/`] = `{{base}}node_modules/bundle-free/${k}/`;
         }
 
         // Generate a regexp to match anything in a .html file that looks like a reference
@@ -235,14 +232,41 @@ export function bundleFree(options)
         // Fix up non-relative paths to node modules
         if (rxModuleRef)
             content = content.replace(rxModuleRef, (m, delim, module) => `${delim}${base}node_modules/${module}`);
+
+        // Create import map with correct /base/
+        let basedImports = { };
+        for (let k of Object.keys(imports))
+        {
+            basedImports[k] = imports[k].replace(/\{\{base\}\}/g, base + "/");
+        }
+
     
-        // Insert import map in the <head> block
-        let importMapStr = JSON.stringify(importMap, null, 4).replace(/\{\{base\}\}/g, base + "/");
-        content = content.replace("<head>", `<head>\n<script type="importmap">\n${importMapStr}\n</script>\n`);
+        // Update <head>
+        content = content.replace(/<head>([\s\S]*?)<\/head>/, (m, head) => {
+
+            // Replace existing import map
+            let didUpdateExisting = false;
+            head = head.replace(/<script\s+type\s*=\s*"importmap"\s*>([\s\S]*?)<\/script>/, (m, oldmap) => {
+                didUpdateExisting = true;
+                let existing = JSON.parse(oldmap);
+                Object.assign(existing.imports, basedImports);
+                return `<script type="importmap">${JSON.stringify(existing, null, 4)}</script>`;
+            });
+
+            // No existing import map, add one
+            if (!didUpdateExisting)
+            {
+                head = `\n    <script type="importmap">${JSON.stringify({ imports: basedImports }, null, 4)}</script>${head}\n`;
+            }
         
-        // In ya face?
-        if (options.inYaFace)
-            content = content.replace("<head>", `<head>\n<script src="${base}/bundle-free/public/inYaFace.js"></script>\n`);
+            // In ya face?
+            if (options.inYaFace)
+                head = `\n    <script src="${base}/bundle-free/public/inYaFace.js"></script>${head}\n`;
+
+            // Return update <head>
+            return `<head>${head}</head>`;
+        });
+
 
         // Live reload?
         if (options.livereload)
