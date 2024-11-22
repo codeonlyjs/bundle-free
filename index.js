@@ -12,9 +12,24 @@ export function bundleFree(options)
     // Clone options
     options = Object.assign({}, options);
 
-    // Find node modules if not specified
-    if (!options.node_modules)
-        options.node_modules = findNodeModules();
+    // Create a router
+    let router = express.Router();
+
+    // Work out if we need to do HTML file patching
+    let needHtmlPatching = 
+        options.inYaFace || 
+        options.livereload || 
+        options.replace?.length > 0 ||
+        options.modules?.length > 0;
+
+    let needOurPublicFolder = 
+        options.inYaFace;
+
+    // Serve our public files
+    if (needOurPublicFolder)
+    {
+        router.use("/bundle-free/public", express.static(path.join(thisDir(), "public"), { index: false }));
+    }
 
     // Create import map to be injected into served html files
     let importMap = null;
@@ -28,6 +43,10 @@ export function bundleFree(options)
             console.error("WARNING: bundle-free module mapping is not intended to be used in production environments.");
         }
         
+        // Find node modules if not specified
+        if (!options.node_modules)
+            options.node_modules = findNodeModules();
+
         importMap = {
             imports: {
             },
@@ -84,161 +103,173 @@ export function bundleFree(options)
                                 .map(m => escapeRegExp(m.module))
         let rxModuleNames = `(?:${moduleNames.join("|")})`;
         rxModuleRef = new RegExp(`([\\\'\\\"])(${rxModuleNames}\/)`, "g");
-    }
+    
+        // Rewrite request for package entry points, possibly
+        // running rollup if necessary
+        router.use(async (req, res, next) => {
 
-    // Create a router
-    let router = express.Router();
+            if (req.method != "GET" && req.method != "HEAD")
+                return next();
 
-    // Handler to rewrite node_module paths and inject
-    // import maps and replacements into html files
-    router.use("/", async (req, res, next) => {
+            let base = req.baseUrl;
 
-        let base = req.baseUrl;
-
-        // Is it a module request?
-        let m = req.path.match(/^\/node_modules\/bundle-free\/((?:@[^\/]+\/)?[^\/]+)(\/.*)?$/);
-        if (m)
-        {
-            let pkg = exported_modules.get(m[1]);
-
-            if (pkg.bundleMode == "bundle")
+            // Is it a module request?
+            let m = req.path.match(/^\/node_modules\/bundle-free\/((?:@[^\/]+\/)?[^\/]+)(\/.*)?$/);
+            if (m)
             {
-                let rollupModule = await import("./rollupModule.js");
-                let url = await rollupModule.rollupModule(options, pkg, ".", false);
-                req.url = base + "/" + url;
-            }
-            else
-            {
-                let import_file = getPackageExport(pkg, m[2], [ "import" ]);
-                if (import_file)
+                let pkg = exported_modules.get(m[1]);
+
+                if (pkg.bundleMode == "bundle")
                 {
-                    return res.redirect(`${base}/node_modules/${m[1]}/${import_file}`);
+                    let rollupModule = await import("./rollupModule.js");
+                    let url = await rollupModule.rollupModule(options, pkg, ".", false);
+                    req.url = base + "/" + url;
                 }
                 else
                 {
-                    let rollupModule = await import("./rollupModule.js");
-                    let url = await rollupModule.rollupModule(options, pkg, m[2]);
-                    req.url = base + "/" + url;
+                    let import_file = getPackageExport(pkg, m[2], [ "import" ]);
+                    if (import_file)
+                    {
+                        return res.redirect(`${base}/node_modules/${m[1]}/${import_file}`);
+                    }
+                    else
+                    {
+                        let rollupModule = await import("./rollupModule.js");
+                        let url = await rollupModule.rollupModule(options, pkg, m[2]);
+                        req.url = base + "/" + url;
+                    }
+                }
+            }
+
+            next();
+        });
+    
+        // Serve the node_modules folder
+        router.use(`/node_modules`, express.static(options.node_modules, { index: false }));
+    }
+
+    // Resolve default filename and map unknown urls to spa index.html (if spa enabled)
+    router.use(async (req, res, next) => {
+
+        if (req.method != "GET" && req.method != "HEAD")
+            return next();
+
+        try
+        {
+            // Check if file exists?
+            let s = await fs.stat(path.join(options.path, req.path));
+
+            // Make sure directory requests end with /
+            if (s.isDirectory())
+            {
+                if (!req.path.endsWith("/"))
+                {
+                    let u = new URL(req.originalUrl)
+                    u.pathname += "/";
+                    return res.redirect(u.href);
+                }
+
+                if (options.spa)
+                {
+                    req.url = replaceUrlPath(req.url, "/" + resolveDefault(req, res));
+                }
+                else if (req.path.endsWith("/"))
+                {
+                    req.url = replaceUrlPath(req.url, req.path + "/" + resolveDefault(req, res));
                 }
             }
         }
-
-        // Work out filename being requested
-        let filename = req.path;
-        if (filename == "/")
+        catch
         {
-            var originalUrl = url.parse(req.originalUrl);
-            if (!originalUrl.pathname.endsWith("/"))
+            // Not a known file?
+            if (options.spa)
             {
-                originalUrl.pathname += "/";
-                let urlNew = url.format(originalUrl);
-                return res.redirect(urlNew);
-            }
-            filename = "/" + resolveDefault(req, res);
-        }
-
-        // If it's a html file, inject the importmap so `import ... from "bare-module-name"` works.
-        if (filename.match(/(?:.htm|.html)$/i))
-        {
-            try
-            {
-                await serve_html_file(req, res, path.join(options.path, filename));
-                return;
-            }
-            catch
-            {
-                // Probably file not found, pass it on
-                // fall through and keep looking in other middlewares
+                req.url = replaceUrlPath(req.url, "/" + resolveDefault(req, res));
             }
         }
 
+        // Carry on
         next();
     });
-
-    // Serve the client app folder
-    router.use("/", express.static(options.path, { index: false }));
-
-    // Also serve our public files
-    if (options.inYaFace)
+        
+    
+    // Patch HTML file
+    if (needHtmlPatching)
     {
-        router.use("/", express.static(path.join(thisDir(), "public"), { index: false }));
+        router.use(async (req, res, next) => {
+
+            if (req.method != "GET" && req.method != "HEAD")
+                return next();
+                
+            if (req.path.match(/(?:.htm|.html)$/i))
+            {
+                try
+                {
+                    await patch_html_file(req, res, path.join(options.path, req.path));
+                    return;
+                }
+                catch
+                {
+                    // Probably file not found, pass it on
+                    // fall through and keep looking in other middlewares
+                }
+            }
+
+            next();
+        })
     }
 
-    // Serve the node_modules folder
-    router.use(`/node_modules`, express.static(options.node_modules, { index: false }));
-
-    // If still not found, patch the default html file (if this is an SPA app)
-    router.use("/", async (req, res, next) => {
-        if (options.spa)
-        {
-            try
-            {
-                await serve_html_file(req, res, path.join(options.path, resolveDefault(req, res)));
-                return;
-            }
-            catch
-            {
-                next();
-            }
-        }
-        else
-        {
-            next();
-        }
-    });
+    // Serve everything else directly from the client directory
+    router.use(express.static(options.path, { index: false }));
 
     return router;
 
-    async function serve_html_file(req, res, filename)
+    // Helper to patch html for import map, inYaFace, livereload and user replacements
+    async function patch_html_file(req, res, filename)
     {
         let base = req.baseUrl;
 
-        // Only patch if needed
+        // Read the content
+        let content = await fs.readFile(filename, "utf8");
+
+        // Fix up non-relative paths to node modules
         if (rxModuleRef)
-        {
-            // Read the content
-            let content = await fs.readFile(filename, "utf8");
-
-            // Fix up non-relative paths to node modules
             content = content.replace(rxModuleRef, (m, delim, module) => `${delim}${base}node_modules/${module}`);
+    
+        // Insert import map in the <head> block
+        let importMapStr = JSON.stringify(importMap, null, 4).replace(/\{\{base\}\}/g, base + "/");
+        content = content.replace("<head>", `<head>\n<script type="importmap">\n${importMapStr}\n</script>\n`);
         
-            // Insert import map in the <head> block
-            let importMapStr = JSON.stringify(importMap, null, 4).replace(/\{\{base\}\}/g, base + "/");
-            content = content.replace("<head>", `<head>\n<script type="importmap">\n${importMapStr}\n</script>\n`);
-            
-            // In ya face?
-            if (options.inYaFace)
-                content = content.replace("<head>", `<head>\n<script src="/inYaFace.js"></script>\n`);
+        // In ya face?
+        if (options.inYaFace)
+            content = content.replace("<head>", `<head>\n<script src="${base}/bundle-free/public/inYaFace.js"></script>\n`);
 
-            if (options.livereload)
-            {
-                let port = typeof(options.livereload) === "Number" ? options.livereload : 35729; 
-                content = content.replace("</body>", `
+        // Live reload?
+        if (options.livereload)
+        {
+            let port = typeof(options.livereload) === "Number" ? options.livereload : 35729; 
+            content = content.replace("</body>", `
 <script>
     document.write('<script src="http://' + (location.host || 'localhost').split(':')[0] + ':${port}/livereload.js?snipver=1"></' + 'script>')
 </script>
 </body>`);
-            }
-
-            // User replacements
-            if (options.replace)
-            {
-                for (let r of options.replace)
-                {
-                    let rx = typeof(r.from) === 'string' ? new RegExp(escapeRegExp(r.from), "g") : r.from;
-                    content = content.replace(rx, r.to);
-                }
-            }
-
-            // Send it
-            res.send(content);
         }
-        else
+
+        // User replacements
+        if (options.replace)
         {
-            res.sendFile(filename);
+            for (let r of options.replace)
+            {
+                let rx = typeof(r.from) === 'string' ? new RegExp(escapeRegExp(r.from), "g") : r.from;
+                content = content.replace(rx, r.to);
+            }
         }
+
+        // Send it
+        res.send(content);
     }
 
+    // Helper to resolve default eg: "index.html"
     function resolveDefault(req, res)
     {
         if (options.default instanceof Function)
@@ -247,4 +278,11 @@ export function bundleFree(options)
         }
         return options.default ?? "index.html";
     }
+}
+
+
+function replaceUrlPath(oldUrl, newPath)
+{
+    let u = new URL(oldUrl, "http://x");
+    return newPath + u.search;
 }
