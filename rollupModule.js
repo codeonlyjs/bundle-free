@@ -18,8 +18,8 @@ async function tryLoadRollup()
 
     rollup = (await import('rollup')).rollup;
     nodeResolve = (await import('@rollup/plugin-node-resolve')).nodeResolve;
-    commonjs = await import('@rollup/plugin-commonjs');
-    json = await import('@rollup/plugin-json');
+    commonjs = (await import('@rollup/plugin-commonjs')).default;
+    json = (await import('@rollup/plugin-json')).default;
 }
 
 // Rollup a module
