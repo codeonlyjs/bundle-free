@@ -172,7 +172,9 @@ export function bundleFree(options)
                 }
                 else if (req.path.endsWith("/"))
                 {
-                    req.url = replaceUrlPath(req.url, req.path + "/" + resolveDefault(req, res));
+                    let def = resolveDefault(req, res);
+                    if (def)
+                        req.url = replaceUrlPath(req.url, req.path + "/" + resolveDefault(req, res));
                 }
             }
         }
@@ -202,7 +204,7 @@ export function bundleFree(options)
             {
                 try
                 {
-                    await patch_html_file(req, res, path.join(options.path, req.path));
+                    await patch_html_file(req.baseUrl, path.join(options.path, req.path));
                     return;
                 }
                 catch
@@ -219,16 +221,26 @@ export function bundleFree(options)
     // Serve everything else directly from the client directory
     router.use(express.static(options.path, { index: false }));
 
+    // Attach helpers
+    Object.assign(router, { 
+        patch_html,
+        patch_html_file,
+    });
+
     return router;
 
     // Helper to patch html for import map, inYaFace, livereload and user replacements
-    async function patch_html_file(req, res, filename)
+    async function patch_html_file(base, filename)
     {
         let base = req.baseUrl;
 
         // Read the content
         let content = await fs.readFile(filename, "utf8");
+        return patch_html(base, content);
+    }
 
+    function patch_html(base, content)
+    {
         // Fix up non-relative paths to node modules
         if (rxModuleRef)
             content = content.replace(rxModuleRef, (m, delim, module) => `${delim}${base}node_modules/${module}`);
