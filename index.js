@@ -232,8 +232,6 @@ export function bundleFree(options)
     // Helper to patch html for import map, inYaFace, livereload and user replacements
     async function patch_html_file(base, filename)
     {
-        let base = req.baseUrl;
-
         // Read the content
         let content = await fs.readFile(filename, "utf8");
         return patch_html(base, content);
