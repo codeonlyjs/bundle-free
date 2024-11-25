@@ -204,7 +204,7 @@ export function bundleFree(options)
             {
                 try
                 {
-                    await patch_html_file(req.baseUrl, path.join(options.path, req.path));
+                    res.send(await patch_html_file(req.baseUrl, path.join(options.path, req.path)));
                     return;
                 }
                 catch
@@ -299,8 +299,7 @@ export function bundleFree(options)
             }
         }
 
-        // Send it
-        res.send(content);
+        return content;
     }
 
     // Helper to resolve default eg: "index.html"
