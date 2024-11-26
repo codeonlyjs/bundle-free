@@ -166,6 +166,13 @@ export function isModulePackage(pkg)
     return getPackageExport(pkg, '.', [ "import" ]) != null;
 }
 
+export function anyCjsDeps(pkg)
+{
+    if (!isModulePackage(pkg))
+        return false;
+    return !pkg.$all_deps.every(x => x.isModulePackage(x));
+}
+
 // Check if a package only supports bare "." exports
 // and no sub-module exports.
 export function isBarePackage(pkg)
