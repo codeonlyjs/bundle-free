@@ -170,7 +170,7 @@ export function anyCjsDeps(pkg)
 {
     if (!isModulePackage(pkg))
         return false;
-    return !pkg.$all_deps.every(x => isModulePackage(x));
+    return !pkg.$all_deps.every(x => x.isModulePackage(x));
 }
 
 // Check if a package only supports bare "." exports
