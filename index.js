@@ -3,7 +3,7 @@ import path from 'node:path';
 import url from 'node:url';
 import express from 'express';
 import { findNodeModules, escapeRegExp, thisDir, } from "./utils.js";
-import { getPackage, getPackageExport, isBarePackage, isModulePackage } from "./packageUtils.js";
+import { getPackage, getPackageExport, isBarePackage, anyCjsDeps } from "./packageUtils.js";
 
 
 // Middleware for serving client side es6 module apps
@@ -71,7 +71,7 @@ export function bundleFree(options)
                 exported_modules.set(m.module, m.package);
 
                 // Is this a module package?
-                if (isBarePackage(m.package) && isModulePackage(m.package))
+                if (isBarePackage(m.package) && anyCjsDeps(m.package))
                 {
                     m.package.bundleMode = "bundle";
                 }
@@ -225,6 +225,7 @@ export function bundleFree(options)
     Object.assign(router, { 
         patch_html,
         patch_html_file,
+        options,
     });
 
     return router;
@@ -245,30 +246,36 @@ export function bundleFree(options)
 
         // Create import map with correct /base/
         let basedImports = { };
-        for (let k of Object.keys(imports))
+        if (imports)
         {
-            basedImports[k] = imports[k].replace(/\{\{base\}\}/g, base + "/");
+            for (let k of Object.keys(imports))
+            {
+                basedImports[k] = imports[k].replace(/\{\{base\}\}/g, base + "/");
+            }
         }
 
     
         // Update <head>
         content = content.replace(/<head>([\s\S]*?)<\/head>/, (m, head) => {
 
-            // Replace existing import map
-            let didUpdateExisting = false;
-            head = head.replace(/<script\s+type\s*=\s*"importmap"\s*>([\s\S]*?)<\/script>/, (m, oldmap) => {
-                didUpdateExisting = true;
-                let existing = JSON.parse(oldmap);
-                Object.assign(existing.imports, basedImports);
-                return `<script type="importmap">${JSON.stringify(existing, null, 4)}</script>`;
-            });
-
-            // No existing import map, add one
-            if (!didUpdateExisting)
+            if (imports)
             {
-                head = `\n    <script type="importmap">${JSON.stringify({ imports: basedImports }, null, 4)}</script>${head}\n`;
+                // Replace existing import map
+                let didUpdateExisting = false;
+                head = head.replace(/<script\s+type\s*=\s*"importmap"\s*>([\s\S]*?)<\/script>/, (m, oldmap) => {
+                    didUpdateExisting = true;
+                    let existing = JSON.parse(oldmap);
+                    Object.assign(existing.imports, basedImports);
+                    return `<script type="importmap">${JSON.stringify(existing, null, 4)}</script>`;
+                });
+
+                // No existing import map, add one
+                if (!didUpdateExisting)
+                {
+                    head = `\n    <script type="importmap">${JSON.stringify({ imports: basedImports }, null, 4)}</script>${head}\n`;
+                }
             }
-        
+            
             // In ya face?
             if (options.inYaFace)
                 head = `\n    <script src="${base}/bundle-free/public/inYaFace.js"></script>${head}\n`;
