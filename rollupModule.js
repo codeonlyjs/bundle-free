@@ -87,16 +87,16 @@ export async function rollupModule(options, pkg, exportPath, exportWrapper)
         await tryLoadRollup();
 
         // Work out full path to the import file
-        src_file = path.join(options.node_modules, pkg.name, src_file);
+        src_file = path.join(path.resolve(options.node_modules), pkg.name, src_file);
 
         // Create an export wrapper?
         let export_wrapper_file;
         if (exportWrapper)
         {
             // Create wrapper file
-            let export_wrapper_file = path.join(cache_dir, `exports-${cache_file}`);
+            export_wrapper_file = path.join(cache_dir, `exports-${cache_file}`);
             let exports = await import("file://" + src_file);
-            await fs.writeFile(exports_wrapper_file, `export { ${Object.keys(exports).join(",")} } from ${JSON.stringify(src_file)}`, "utf8");
+            await fs.writeFile(export_wrapper_file, `export { ${Object.keys(exports).join(",")} } from ${JSON.stringify(src_file)}`, "utf8");
             src_file = export_wrapper_file;
         }
 

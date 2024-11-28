@@ -71,7 +71,7 @@ export function bundleFree(options)
                 exported_modules.set(m.module, m.package);
 
                 // Is this a module package?
-                if (isBarePackage(m.package) && anyCjsDeps(m.package))
+                if (anyCjsDeps(m.package))
                 {
                     m.package.bundleMode = "bundle";
                 }
@@ -115,25 +115,30 @@ export function bundleFree(options)
             if (m)
             {
                 let pkg = exported_modules.get(m[1]);
-
-                if (pkg.bundleMode == "bundle")
+                if (pkg)
                 {
-                    let rollupModule = await import("./rollupModule.js");
-                    let url = await rollupModule.rollupModule(options, pkg, ".", false);
-                    req.url = base + "/" + url;
-                }
-                else
-                {
-                    let import_file = getPackageExport(pkg, m[2], [ "import" ]);
-                    if (import_file)
+                    if (pkg.bundleMode == "bundle")
                     {
-                        return res.redirect(`${base}/node_modules/${m[1]}/${import_file}`);
+                        let rollupModule = await import("./rollupModule.js");
+                        let url = await rollupModule.rollupModule(options, pkg, ".", false);
+                        if (url == null)
+                            url = await rollupModule.rollupModule(options, pkg, ".", true);
+                        if (url != null)
+                            req.url = base + "/" + url;
                     }
                     else
                     {
-                        let rollupModule = await import("./rollupModule.js");
-                        let url = await rollupModule.rollupModule(options, pkg, m[2]);
-                        req.url = base + "/" + url;
+                        let import_file = getPackageExport(pkg, m[2], [ "import" ]);
+                        if (import_file)
+                        {
+                            return res.redirect(`${base}/node_modules/${m[1]}/${import_file}`);
+                        }
+                        else
+                        {
+                            let rollupModule = await import("./rollupModule.js");
+                            let url = await rollupModule.rollupModule(options, pkg, m[2]);
+                            req.url = base + "/" + url;
+                        }
                     }
                 }
             }

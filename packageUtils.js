@@ -168,7 +168,7 @@ export function isModulePackage(pkg)
 
 export function anyCjsDeps(pkg)
 {
-    if (!isModulePackage(pkg))
+    if (isModulePackage(pkg))
         return false;
     return !pkg.$all_deps.every(x => isModulePackage(x));
 }
