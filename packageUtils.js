@@ -163,7 +163,7 @@ export function getPackage(options, moduleName)
 // Check if a package is a ES6 module
 export function isModulePackage(pkg)
 {
-    return getPackageExport(pkg, '.', [ "import" ]) != null;
+    return getPackageExport(pkg, '.', [ "import", "browser" ]) != null;
 }
 
 export function anyCjsDeps(pkg)

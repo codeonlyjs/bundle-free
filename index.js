@@ -128,7 +128,7 @@ export function bundleFree(options)
                     }
                     else
                     {
-                        let import_file = getPackageExport(pkg, m[2], [ "import" ]);
+                        let import_file = getPackageExport(pkg, m[2], [ "import", "browser" ]);
                         if (import_file)
                         {
                             return res.redirect(`${base}/node_modules/${m[1]}/${import_file}`);
