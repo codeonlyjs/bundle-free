@@ -15,7 +15,7 @@ export function thisDir()
 // Find the node_modules folder 
 export function findNodeModules()
 {
-    let dir = __dirname;
+    let dir = path.dirname(__dirname);
     while (true)
     {
         let node_modules = path.join(dir, "node_modules");
