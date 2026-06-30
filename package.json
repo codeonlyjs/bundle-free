@@ -21,6 +21,13 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "express": "^4.21.1"
+    "@rollup/plugin-commonjs": "^28.0.1",
+    "@rollup/plugin-json": "^6.1.0",
+    "@rollup/plugin-node-resolve": "^15.3.0",
+    "express": "^4.21.1",
+    "rollup": "^4.24.3"
+  },
+  "devDependencies": {
+    "rollup-plugin-polyfill-node": "^0.13.0"
   }
 }

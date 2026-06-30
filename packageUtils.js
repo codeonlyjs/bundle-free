@@ -96,35 +96,56 @@ export function getPackageExport(pkg, exportName, conditions)
         return exportName;
     }
 
-    // Default export "main: xxx"
-    if (conditions.indexOf('import') >= 0)
+    // "browser"" main entry point
+    if (conditions.indexOf("browser") >= 0)
     {
-        if (pkg.module)
-            return pkg.module;
-        if (pkg.main)
-        {
-            if (pkg.main.endsWith(".mjs"))
-                return pkg.main;
-            if (pkg.main.endsWith(".js") && pkg.type == "module")
-                return pkg.main;
-        }
+        let r = tryMain("browser");
+        if (r)
+            return r;
     }
 
-    if (conditions.indexOf('require') >= 0)
-    {
-        if (pkg.main)
-        {
-            if (pkg.main.endsWith(".cjs"))
-                return pkg.main;
-            if (pkg.main.endsWith(".js") && (pkg.type === undefined || pkg.type == "commonjs"))
-                return pkg.main;
-        }
+    // "main"
+    let r2 = tryMain("main");
+    if (r2)
+        return r2;
 
-        if (pkg.type === undefined || pkg.type === "commonjs")
-            return "index.js";
-    }
+    // default "index.js"
+    if (pkg.main === undefined && (
+            pkg.type === undefined || pkg.type === "commonjs") && 
+            conditions.indexOf('require') >= 0)
+        return "index.js";
 
     return null;
+
+    function tryMain(mainKey)
+    {
+        // Default export "main: xxx"
+        if (conditions.indexOf('import') >= 0)
+        {
+            if (pkg.module)
+                return pkg.module;
+            if (pkg[mainKey])
+            {
+                if (pkg[mainKey].endsWith(".mjs"))
+                    return pkg[mainKey];
+                if (pkg[mainKey].endsWith(".js") && pkg.type == "module")
+                    return pkg[mainKey];
+            }
+        }
+
+        if (conditions.indexOf('require') >= 0)
+        {
+            if (pkg[mainKey])
+            {
+                if (pkg[mainKey].endsWith(".cjs"))
+                    return pkg[mainKey];
+                if (pkg[mainKey].endsWith(".js") && (pkg.type === undefined || pkg.type == "commonjs"))
+                    return pkg[mainKey];
+            }
+        }
+
+        return null;
+    }
 }
 
 
