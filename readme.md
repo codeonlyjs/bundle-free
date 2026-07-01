@@ -10,7 +10,7 @@ BundleFree is an ExpressJS middleware for use during development that:
 * provides an easy way to inject livereload scripts so that when files are 
   saved during development the browser automatically refreshes and updates
 
-* can display prominent in-browser JavaScript error messages
+* injects a client script to displays prominent in-browser JavaScript error messages
 
 
 Notes: 
@@ -18,8 +18,8 @@ Notes:
 * this is only intended to be used during development - for production you
   should still use a bundler. 
 
-* this is not a browserification tool and only works for NPM packages designed
-  to work in browsers in the first place.
+* this is not a really browserification tool and your mileage with modules
+  not intended to be used in the browser might vary.
 
 
 ## Install
@@ -43,7 +43,7 @@ available in the `./client/dist` folder.
 First, import the middleware:
 
 ```js
-import { bundleFree } from '@codeonlyjs/bundle-free';
+import { bundleFreeMiddleware } from '@codeonlyjs/bundle-free';
 ```
 
 Next, "use" the middleware:
@@ -57,23 +57,15 @@ if (process.env.NODE_ENV == "production")
 else
 {
     // Development, serve unbundled app
-    app.use(bundleFree({
+    app.use(bundleFreeMiddleWare({ /* options */}));
 
-        // The location of the unbundled client app
-        path: path.join(__dirname, "client"),
-
-        // Modules to be made available to the unbundled app
-        modules: [ 
-            '@scoped/package1',
-            'package2'
-        ],
-
-    }));
+    // Development, serve unbundled app
+    app.use(express.static(path.join(__dirname, "client")));
 }
 ```
 
 Now, in your client side `.js` files you can directly reference any
-modules listed in the `modules` option.
+install npm modules.
 
 ```js
 // Client side script files can now import directly from the bare
@@ -82,140 +74,139 @@ import * from '@scoped/package1';
 ```
 
 
-## Other Import Map Entries
+## Options
 
-Since browsers only support a single ES6 import map, if you need to specify
-other modules, use an object with `module` and `url` keys instead of a 
-string in the modules list:
+The following options are available:
 
-```js
-    modules: [ 
-        { module: '@scoped/package', url: "/mylibs/package/index.js" },
-        'package2'
-    ],
+* `baseDir` - an optional base directory - typically this will be the root directory of your project, defaults to the current working directory
+* `autoModules` - if true (the default) automatically serves all modules in the project's `package.json` file
+* `autoDeps` - if true (the default) automatically follow the dependency chain of all referenced modules
+* `modules` - an optional array of module overrides and settings
+* `replace` - an optional array of string replacements on served files (see below)
+* `rules` - an optional array of array of rewrite and redirect rules (see below)
+* `moduleBaseUrl` - the URL in which modules are made available (defaults to `/modules`)
+* `livereload` - allows injection of livereload script into html pages (see below)
+* `inYaFace` - if true (false by default) injects a script into html pages to prominently display client side JavaScript errors.
+
+
+
+## Module Options
+
+You can specify additional modules, or modify options on automatically discovered modules using the `modules` options.
+
+For each module entry, the following options are available:
+
+* `name` - required the package name of the module
+* `ignore` - if true, suppresses availability of this module client side
+* `url` - if set, creates an entry in the generated import map, but doesn't nothing to serve this module
+* `virtual` - specifies virtual module with contents specified by this property
+* `location` - specifies the file location of this module (the path is relative to `options.baseDir`)
+* `package` - an object that can be used to override settings in the modules `package.json` file.  This object is deep merged with the package.json contents.
+* `rollup` - if true, forces the package to be bundled using rollup.
+* `nodeps` - suppresses automatically serving the module's dependencies.
+
+eg: suppress an automatically discovered module from client side access:
+
 ```
+    options: {
+        modules: [
+            { 
+                name: "@scope/module", 
+                ignore: true 
+            },
+        ]
+    }
+```
+
+eg: create a virtual module:
+
+```
+    options: {
+        modules: [
+            { 
+                name: "customModule", 
+                virtual: `export default function() { };` 
+            },
+        ]
+    }
+```
+
+eg: force a package to be bundled using rollup:
+
+```
+    options: {
+        modules: [
+            { 
+                name: "mycjsmodule", 
+                rollup: true 
+            },
+        ]
+    }
+```
+
+
+
+## String Replacements
+
+Sometimes you might need to patch certain files during development:
+
+eg: make a file reference absolute to root instead of relative to page URL (handy for
+    when index is used as fallback for SPA applications)
+
+```
+    options: {
+        replace: [
+            { from: "./Main.js", to: "/Main.js", contentType: "text/html" }
+        ]
+    }
+```
+
+The following options are available:
+
+* `from` - the string or regex to search for
+* `to` - the string to replace with
+* `contentType` - optional, string or regex, only replaces in served content matching this content type
+* `url` - optional, string or regex, only replaces in served content matching this url
+
+Note: string replacements should only ever be used during development - when used they install a filter
+that captures output and applies the replacements when the output stream is ended.
+
+Note: string replacements can be used on most text file types (including text, html, css etc...) but
+many common binary file types are skipped and these replacements won't apply.
+
+
+
+## Rewrite and Redirect Rules
+
+The rules key can be used to specify rewrite and redirect rules:
+
+```
+    options: {
+        rules: [
+            { redirect: "/index.html", to: "/" },
+            { rewrite: "/config.js", to: "/config.dev.js" }
+        ]
+    }
+```
+
+The following fields are available:
+
+* `redirect` - a string or regex to match against the current URL and when matches invokes a redirect
+* `rewrite` - a string or regex to match against the current URL and when matches invokes a URL rewrite
+* `to` - what to redirect/rewrite to
+
+
 
 ## Live Reload Script
 
-Since bundle-free is patching `.html` files anyway, why not also inject in the 
-[`livereload`](https://www.npmjs.com/package/livereload) script so that saving
-files automatically updates the browser.
-
-By setting the `livereload` option to either `true` (to use the default livereload
-server port) or to port number, bundle-free will automatically insert the script
-at the bottom of the page.
+By setting the `livereload` to a truthy value, or an object with a `.port` setting bundle-free will 
+automatically insert the script at the bottom of the page.
 
 See [`livereload`](https://www.npmjs.com/package/livereload) for more.
 
-eg:
+(Note your server will still need to setup the livereload server, this option just injects the script
+into served html pages).
 
-```js
-    // npm install --save livereload
-    import livereload from 'livereload';
-
-    // omitted...
-
-    if (developmentMode)
-    {
-        // Development only
-        app.use(bundleFree({
-
-            // other settings omitted...
-
-            // Insert the live reload script
-            livereload: true,
-        }));
-
-        // Create live reload server and watch directories...
-        let lrs = livereload.createServer();
-        lrs.watch(path.join(__dirname, "client"));
-    }
-
-```
-
-## Handling CommonJS
-
-While BundleFree is designed primarily for serving ES6 NPM packages
-it will also attempt to serve CommonJS packages.
-
-If a referenced package or any of its dependencies are only available 
-as CommonJS, BundleFree will use Rollup to convert the entire package to 
-ES6 and serve the repackaged bundle.
-
-YMMV
-
-
-## Mounting in a Sub-path
-
-Mounting on a sub-path is supported as follows:
-
-```js
-    app.use("/somepath", bundleFree({ ... }));
-```
-
-
-
-## Single Page Apps
-
-Single page apps that use normal URL paths for in-page navigation need server
-support to serve the main `index.html` file of the SPA for any URL that doesn't
-match a file in the client directory.  
-
-eg: suppose the page `http://somesite.com/products/productname` should 
-    be handled by the single page app at `/index.html`
-
-To support this, set the `spa` property to true:
-
-```js
-    app.use(bundleFree({
-
-        // The location of the unbundled client app
-        path: path.join(__dirname, "client"),
-
-        // Serve URLs that don't match a file as index.html
-        spa: true;
-
-        // Modules to be made available to the unbundled app
-        modules: [ 
-            '@scoped/module1',
-            '@scoped/module2'
-        ]
-
-    }));
-```
-
-Since you probably want this same behaviour for the production release, you 
-can use bundle-free without the module remapping:
-
-```js
-    app.use(bundleFree({
-        path: path.join(__dirname, "client/dist"),
-        spa: true,
-    }));
-```
-
-Finally, if the `/index.html` file references relative files you'll probably
-want to make them absolute too (otherwise they won't work in sub-path urls).
-
-eg: suppose `index.html` references `./Main.js`, this won't work for a single page 
-app if `index.html` is served in response to a request for `/sub/sub/page` - 
-because the browser will try to request this as `/sub/sub/Main.js` which 
-doesn't exist.
-
-We can't just use an absolute URL in the `index.html` file because then the
-bundler won't find it (at least Vite doesn't seem to)
-
-By using the `replace` option we can serve the absolute path the `/Main.js`
-during development, but leave the relative `./Main.js` in place for when
-running the bundler.
-
-```js
-    replace: [
-        { from: "./Main.js", to: "/Main.js" }
-    ],
-```
-
-`from` can be a string or regular expression.
 
 
 ## Prominent Error Display
@@ -226,51 +217,4 @@ you bring up the debugger/inspector and check in the console.
 BundleFree includes an option `inYaFace` that when set to true injects
 a script that watches for client side JavaScript errors and displays
 a very prominent "in your face" error message.
-
-
-```js
-    app.use(bundleFree({
-
-        // Other options omitted
-
-        // Display prominent errors
-        inYaFace: true,
-
-    }));
-```
-
-## Complete Example
-
-Here's a complete example that supports single-page app mode, live reload 
-and prominent error display.
-
-```js
-if (process.env.NODE_ENV == "production")
-{
-    app.use(bundleFree({
-        path: path.join(__dirname, "client/dist"),
-        spa: true,
-    }));
-}
-else
-{
-    app.use(bundleFree({
-        path: path.join(__dirname, "client"),
-        modules: [ 
-            '@scoped/module1',
-            '@scoped/module2'
-        ],
-        replace: [
-            { from: "./Main.js", to: "/Main.js" }
-        ],
-        spa: true,
-        inYaFace: true,
-        livereload: true
-    }));
-
-    // Create live reload server and watch directories...
-    let lrs = livereload.createServer();
-    lrs.watch(path.join(__dirname, "client"));
-}
-```
 

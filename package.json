@@ -1,7 +1,7 @@
 {
   "name": "@codeonlyjs/bundle-free",
-  "version": "1.0.36",
-  "description": "ExpressJS middleware for using NPM packages client side without a bundler",
+  "version": "2.0.0",
+  "description": "ExpressJS middleware for serving NPM packages to browser",
   "main": "index.js",
   "type": "module",
   "scripts": {
@@ -24,10 +24,9 @@
     "@rollup/plugin-commonjs": "^28.0.1",
     "@rollup/plugin-json": "^6.1.0",
     "@rollup/plugin-node-resolve": "^15.3.0",
-    "express": "^4.21.1",
-    "rollup": "^4.24.3"
-  },
-  "devDependencies": {
+    "deepmerge": "^4.3.1",
+    "es-module-lexer": "^2.2.0",
+    "rollup": "^4.24.3",
     "rollup-plugin-polyfill-node": "^0.13.0"
   }
 }

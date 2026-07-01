@@ -1,38 +1,19 @@
-import path from 'node:path';
-import url from 'node:url';
 import fs from 'node:fs/promises';
-import { existsSync } from 'node:fs';
-
-// Path to self
-const __dirname = path.dirname(url.fileURLToPath(import.meta.url));
-
-// Return self directory
-export function thisDir()
-{
-    return __dirname;
-}
-
-// Find the node_modules folder 
-export function findNodeModules()
-{
-    let dir = path.dirname(__dirname);
-    while (true)
-    {
-        let node_modules = path.join(dir, "node_modules");
-        if (existsSync(node_modules))
-            return node_modules;
-        let parentDir = path.dirname(dir);
-        if (parentDir == dir)
-        {
-            throw new Error("Failed to locate node_modules");
-        }
-        dir = parentDir;
-    }
-}
+import path from 'node:path';
+import { existsSync, readFileSync } from 'node:fs';
+import { init, parse } from 'es-module-lexer';
 
 // Helper to escape a string for use in a regular expression
 export function escapeRegExp(string) {
     return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+export function ensureRegExp(stringOrRegex)
+{
+    if (typeof(stringOrRegex) === "string")
+        return new RegExp(escapeRegExp(stringOrRegex), "g");
+    else
+        return string;
 }
 
 // Convert a URL pattern with * wildcards in to a regexp
@@ -54,15 +35,31 @@ export function exists(pathname)
                 .catch(() => false);
 }
 
-// Try to unlink a file, ignore if can't
-export async function tryUnlink(pathname)
+// Get the package file for a module
+export function readPackageFile(folder)
 {
     try
     {
-        await fs.unlink(pathname);
+        return JSON.parse(readFileSync(path.join(folder, "package.json")));
     }
-    catch
+    catch (err)
     {
-        // don't care
+        if (err.code == "ENOENT")
+            return null;
+        throw err;
     }
+}
+
+
+// Check if an ES6 module has a default export
+export async function doesEs6ModuleHaveDefaultExport(filePath) {
+  await init;
+  const source = await fs.readFile(filePath, 'utf8');
+  const [, exports] = parse(source);
+
+  // Only catches locally-declared "export default" or explicit
+  // "export { default } from './x.js'" re-exports.
+  // "export * from './x.js'" is correctly excluded — it never
+  // carries default, per spec.
+  return exports.some(e => e.n === 'default');
 }
