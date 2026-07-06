@@ -79,7 +79,6 @@ import * from '@scoped/package1';
 The following options are available:
 
 * `baseDir` - an optional base directory - typically this will be the root directory of your project, defaults to the current working directory
-* `autoModules` - if true (the default) automatically serves all modules in the project's `package.json` file
 * `autoDeps` - if true (the default) automatically follow the dependency chain of all referenced modules
 * `modules` - an optional array of module overrides and settings
 * `replace` - an optional array of string replacements on served files (see below)
@@ -96,6 +95,7 @@ You can specify additional modules, or modify options on automatically discovere
 
 For each module entry, the following options are available:
 
+* `"*"` - wild card string entry means serve all modules in the baseDir/package.json dependencies
 * `name` - required the package name of the module
 * `ignore` - if true, suppresses availability of this module client side
 * `url` - if set, creates an entry in the generated import map, but doesn't nothing to serve this module
@@ -105,11 +105,12 @@ For each module entry, the following options are available:
 * `rollup` - if true, forces the package to be bundled using rollup.
 * `nodeps` - suppresses automatically serving the module's dependencies.
 
-eg: suppress an automatically discovered module from client side access:
+eg: serve all modules in package.json dependencies, except "@scope/module"
 
 ```
     options: {
         modules: [
+            "*",            // Serve all project dependencies
             { 
                 name: "@scope/module", 
                 ignore: true 

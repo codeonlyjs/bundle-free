@@ -17,7 +17,6 @@ export class ModuleMapper
             baseDir: process.cwd(),
             moduleBaseUrl: "/modules",
             modules: [],
-            autoModules: true,
             autoDeps: true,
         }, options);
 
@@ -41,6 +40,10 @@ export class ModuleMapper
     /** Given a html string, injects the module import map into it's <head> section */
     injectImportMap(html)
     {
+        // Not necessary?
+        if (this.#moduleMap.size == 0)
+            return html;
+
         // Update <head>
         let headFound = false;
         let result = html.replace(/<head>([\s\S]*?)<\/head>/, (m, head) => {
@@ -268,6 +271,25 @@ export class ModuleMapper
             // Simple "modulename"
             if (typeof(m) === 'string')
             {
+                // All base modules?
+                if (m === '*')
+                {
+                    let rootPkg = readPackageFile(options.baseDir);
+                    if (rootPkg?.dependencies)
+                    {
+                        for (let name of Object.keys(rootPkg.dependencies))
+                        {
+                            if (!rootModules.has(name))
+                            {
+                                rootModules.set(name, { 
+                                    name,  
+                                    refloc: options.baseDir,
+                                });
+                            }
+                        }
+                    }
+                    continue;
+                }
                 m = { name: m };
             }
 
@@ -287,24 +309,6 @@ export class ModuleMapper
             rootModules.set(modinfo.name, modinfo);
         }
 
-        // Read dependencies from the project package file
-        if (options.autoModules)
-        {
-            let rootPkg = readPackageFile(options.baseDir);
-            if (rootPkg?.dependencies)
-            {
-                for (let name of Object.keys(rootPkg.dependencies))
-                {
-                    if (!rootModules.has(name))
-                    {
-                        rootModules.set(name, { 
-                            name,  
-                            refloc: options.baseDir,
-                        });
-                    }
-                }
-            }
-        }
 
         // Load root modules and all dependencies
         let modules = new Map();
