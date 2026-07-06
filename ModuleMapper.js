@@ -117,7 +117,33 @@ export class ModuleMapper
         if (!tail)
             tail = ".";
         else
+        {
             tail = "./" + tail;
+
+            if (tail.endsWith(".css"))
+            {
+                let cssFile = getPackageExport(module.package, tail, ["browser"]);
+                if (cssFile)
+                {
+                    return {
+                        file: path.join(module.location, cssFile),
+                    }
+
+                    /*
+                    let cssContent = await fsPromises.readFile(path.join(module.location, cssFile), "utf8");
+                    return {
+                        contentType: "application/javascript",
+                        content: 
+`let styleEl = document.createElement("style");
+styleEl.setAttribute("data-source", ${JSON.stringify(url)});
+styleEl.textContent = ${JSON.stringify(cssContent)};
+document.head.appendChild(styleEl);
+export default styleEl;
+`,
+*/
+                }
+            }
+        }
 
         // Don't serve ES6 module directly if client explicitly asked for module to be rolled up
         let file;
