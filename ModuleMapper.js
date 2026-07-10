@@ -147,7 +147,7 @@ export default styleEl;
 
         // Don't serve ES6 module directly if client explicitly asked for module to be rolled up
         let file;
-        if (!m.rollup)
+        if (!module.rollup)
         {
             // ES6 module?
             file = getPackageExport(module.package, tail, ["import", "browser"]);
@@ -324,14 +324,10 @@ export default styleEl;
                 throw new Error("missing module `name` property");
 
             // Check not already defined
-            if (rootModules.has(m.name))
-                throw new Error(`duplicate module: '${m.name}'`);
+            let existing = rootModules.get(m.name) ?? {};
 
             // Setup module info
-            let modinfo = Object.assign({
-                reason: "explicit",
-                refloc: options.baseDir,
-            }, m);
+            let modinfo = Object.assign(existing, m);
             rootModules.set(modinfo.name, modinfo);
         }
 
@@ -348,29 +344,30 @@ export default styleEl;
 
         function loadModule(m)
         {
+            // Already loaded
             if (modules.has(m.name))
                 return;
             modules.set(m.name, m);
 
-            // Explicitly ignored module?
-            if (m.ignore)
-                return;
-
-            if (m.url)
-                return;
-
-            // Virtual module
-            if (m.virtual)
+            // Quit if to be ignore, virtual or already resolve
+            if (m.ignore || m.url || m.virtual)
                 return;
 
             // Locate the module
             if (!m.location)
+            {
                 m.location = locateModule(m.refloc, m.name);
+                if (!m.location)
+                    return;
+            }
             else
+            {
+                // Explicit location, resolve it
                 m.location = path.resolve(self.options.baseDir, m.location);
+            }
 
+            // Setup url
             let url = self.encodePath(m.location);
-            //console.log(`loading module ${m.name} from ${path.relative(options.baseDir, m.location)}`);
 
             // Read package file
             let pkg = readPackageFile(m.location);
@@ -394,14 +391,14 @@ export default styleEl;
             {
                 for (let dep of Object.keys(m.package.dependencies))
                 {
-                    // Ignore if already referenced
-                    if (!rootModules.has(dep))
-                    {
-                        loadModule({ 
-                            name: dep, 
-                            refloc: m.location 
-                        });
-                    }
+                    // Get settings for this module
+                    let settings = rootModules.get(dep) ?? {};
+
+                    // Load dependencies
+                    loadModule(Object.assign({ 
+                        name: dep, 
+                        refloc: m.location 
+                    }, settings));
                 }
             }
         }
