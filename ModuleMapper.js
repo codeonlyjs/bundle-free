@@ -356,7 +356,7 @@ export default styleEl;
             // Locate the module
             if (!m.location)
             {
-                m.location = locateModule(m.refloc, m.name);
+                m.location = locateModule(m.refloc ?? options.baseDir, m.name);
                 if (!m.location)
                     return;
             }
