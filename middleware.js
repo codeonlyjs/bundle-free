@@ -28,46 +28,61 @@ export function bundleFreeMiddleware(options)
 
     return async function(req, res, next) 
     {
-        // Process URL rules
-        if (processUrlRules(req, res, next))
-            return;
+        try
+        {
+            // Process URL rules
+            if (processUrlRules(req, res, next))
+                return;
 
-        // Only interested in GET and HEAD requests
-        if (req.method != "GET" && req.method != "HEAD")
+            // Only interested in GET and HEAD requests
+            if (req.method != "GET" && req.method != "HEAD")
+                return next();
+
+            // Our assets?
+            if (req.path == "/inYaFace.js")
+            {
+                res.sendFile(path.join(__dirname, "public", "inYaFace.js"));
+                return;
+            }
+
+            // Install output filter
+            installOutputFilter(req, res);
+
+            // Map module urls
+            let action = await bf.mapUrl(req.path);
+            if (action != null)
+            {
+                // Not allowed, or doesn't exist
+                if (action.notFound)
+                {
+                    let err = new Error('Not Found');
+                    err.status = 404;
+                    return next(err);
+                }
+
+                // Mapped to a file?
+                if (action.file)
+                {
+                    res.sendFile(action.file)
+                    return;
+                }
+
+                // Generated content?
+                if (action.content)
+                {
+                    res.type(action.contentType);
+                    res.send(action.content);
+                    return;
+                }
+            }
+
+            // Continue
             return next();
-
-        // Our assets?
-        if (req.path == "/inYaFace.js")
-        {
-            res.sendFile(path.join(__dirname, "public", "inYaFace.js"));
-            return;
         }
-
-        // Install output filter
-        installOutputFilter(req, res);
-
-        // Map module urls
-        let action = await bf.mapUrl(req.path);
-        if (action != null)
+        catch (err)
         {
-            // Mapped to a file?
-            if (action.file)
-            {
-                res.sendFile(action.file)
-                return;
-            }
-
-            // Generated content?
-            if (action.content)
-            {
-                res.type(action.contentType);
-                res.send(action.content);
-                return;
-            }
+            return next(err);
         }
-
-        // Continue
-        return next();
     }
 
     function isBinaryFileType(path)

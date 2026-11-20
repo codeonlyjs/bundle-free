@@ -6,6 +6,55 @@ import { runRollup } from './rollupModule.js';
 import { doesEs6ModuleHaveDefaultExport, escapeRegExp, readPackageFile } from './utils.js';
 import merge from "deepmerge";
 
+/** File extensions served by default (via the `$` file route and module css/js routes) */
+export const defaultAllowedExtensions = Object.freeze([
+    ".js", ".mjs", ".css", ".map", ".wasm",
+    ".woff", ".woff2", ".ttf", ".otf", ".eot",
+    ".svg", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".avif",
+]);
+
+// Returned from mapUrl when a request is related to module mapping
+// but is not permitted (or doesn't exist)
+const NOT_FOUND = Object.freeze({ notFound: true });
+
+// Check if a path is equal to or contained within a root directory
+// (both paths must be absolute and normalized)
+function isPathInside(root, file)
+{
+    if (process.platform === "win32")
+    {
+        root = root.toLowerCase();
+        file = file.toLowerCase();
+    }
+    let rel = path.relative(root, file);
+    if (rel === "")
+        return true;
+    return rel !== ".." && !rel.startsWith(".." + path.sep) && !path.isAbsolute(rel);
+}
+
+// Check that each segment of a URL tail is safe to map to a file system path
+// (no "..", no back slashes, no null characters and no drive letters)
+function isSafeUrlTail(tail)
+{
+    if (!tail)
+        return true;
+    for (let part of tail.split("/"))
+    {
+        let decoded;
+        try
+        {
+            decoded = decodeURIComponent(part);
+        }
+        catch
+        {
+            return false;
+        }
+        if (decoded === ".." || /[\\\0]/.test(decoded) || /^[a-zA-Z]:/.test(decoded))
+            return false;
+    }
+    return true;
+}
+
 
 /** Handled module mapping */
 export class ModuleMapper
@@ -18,6 +67,10 @@ export class ModuleMapper
             moduleBaseUrl: "/modules",
             modules: [],
             autoDeps: true,
+            allowedDirs: [],
+            allowExtensions: [],
+            disallowExtensions: [],
+            unsafeAllowAnyFile: false,
         }, options);
 
         // Store options
@@ -25,6 +78,9 @@ export class ModuleMapper
 
         // Resolve modules
         this.#resolveModules();
+
+        // Work out which directories and file types can be served
+        this.#resolveAllowedFiles();
 
         // Regex for [@company/]module or '$'
         let rxModuleName = "((?:(?:(?:@[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?\/))?(?:[a-zA-Z0-9](?:[a-zA-Z0-9._-]*[a-zA-Z0-9])?))|\\$)"
@@ -36,6 +92,123 @@ export class ModuleMapper
     #options;
     #moduleMap;
     #rxUrl;
+    #allowedDirs;
+    #allowedExtensions;
+
+    /** The (real path) directories from which files can be served
+     * @type {string[]}
+     */
+    get allowedDirs() { return this.#allowedDirs; }
+
+    /** The set of file extensions that can be served
+     * @type {Set<string>}
+     */
+    get allowedExtensions() { return this.#allowedExtensions; }
+
+    // Build the list of allowed directories and file extensions
+    #resolveAllowedFiles()
+    {
+        let options = this.#options;
+
+        if (options.unsafeAllowAnyFile)
+        {
+            console.warn("warning: bundle-free `unsafeAllowAnyFile` is enabled - any file on this machine can be served");
+        }
+
+        // Allowed extensions = defaults + allowExtensions - disallowExtensions
+        let normExt = (x) => (x.startsWith(".") ? x : "." + x).toLowerCase();
+        let exts = new Set(defaultAllowedExtensions);
+        for (let x of options.allowExtensions ?? [])
+            exts.add(normExt(x));
+        for (let x of options.disallowExtensions ?? [])
+            exts.delete(normExt(x));
+        this.#allowedExtensions = exts;
+
+        // Allowed directories = explicit allowedDirs + location of every mapped module
+        let dirs = new Set();
+        let addDir = (dir) => {
+            try
+            {
+                dirs.add(fs.realpathSync(path.resolve(options.baseDir, dir)));
+            }
+            catch (err)
+            {
+                if (err.code != "ENOENT")
+                    throw err;
+            }
+        };
+        for (let dir of options.allowedDirs ?? [])
+            addDir(dir);
+        for (let m of this.#moduleMap.values())
+        {
+            if (m.location && !m.ignore && !m.url && !m.virtual)
+                addDir(m.location);
+        }
+        this.#allowedDirs = [...dirs];
+    }
+
+    /**
+     * Check if a file can be served
+     * @param {string} file the fully qualified file path
+     * @param {Object} [opts]
+     * @param {string} [opts.within] the file must also be inside this directory (eg: the module location)
+     * @param {boolean} [opts.checkExtension] whether to check the file extension (default true)
+     * @returns {Promise<string|null>} the real path of the file, or null if not allowed
+     */
+    async checkFile(file, opts)
+    {
+        if (this.#options.unsafeAllowAnyFile)
+            return file;
+
+        opts = Object.assign({ checkExtension: true }, opts);
+
+        // Check extension
+        if (opts.checkExtension)
+        {
+            let ext = path.extname(file).toLowerCase();
+            if (!this.#allowedExtensions.has(ext))
+                return null;
+        }
+
+        // Resolve symlinks (also fails if file doesn't exist)
+        let real;
+        try
+        {
+            real = await fsPromises.realpath(file);
+            if (!(await fsPromises.stat(real)).isFile())
+                return null;
+        }
+        catch
+        {
+            return null;
+        }
+
+        // Check the extension of the real file too
+        if (opts.checkExtension && !this.#allowedExtensions.has(path.extname(real).toLowerCase()))
+            return null;
+
+        // Must be within specified directory
+        if (opts.within)
+        {
+            let within;
+            try
+            {
+                within = await fsPromises.realpath(opts.within);
+            }
+            catch
+            {
+                return null;
+            }
+            if (!isPathInside(within, real))
+                return null;
+        }
+
+        // Must be within an allowed directory
+        if (!this.#allowedDirs.some(dir => isPathInside(dir, real)))
+            return null;
+
+        return real;
+    }
 
     /** Given a html string, injects the module import map into it's <head> section */
     injectImportMap(html)
@@ -90,13 +263,20 @@ export class ModuleMapper
 
         let [, moduleName, tail] = m;
 
+        // Reject anything that tries to navigate outside the mapped location
+        if (!this.#options.unsafeAllowAnyFile && !isSafeUrlTail(tail))
+            return NOT_FOUND;
+
         // File system?
         if (moduleName == '$')
         {
             // This is direct file load url
-            return {
-                file: this.decodePath(tail),
-            }
+            if (!tail)
+                return NOT_FOUND;
+            let file = await this.checkFile(this.decodePath(tail));
+            if (!file)
+                return NOT_FOUND;
+            return { file };
         }
 
         // Find module
@@ -125,8 +305,11 @@ export class ModuleMapper
                 let cssFile = getPackageExport(module.package, tail, ["browser"]);
                 if (cssFile)
                 {
+                    let file = await this.checkFile(path.join(module.location, cssFile), { within: module.location });
+                    if (!file)
+                        return NOT_FOUND;
                     return {
-                        file: path.join(module.location, cssFile),
+                        file,
                     }
 
                     /*
@@ -153,8 +336,10 @@ export default styleEl;
             file = getPackageExport(module.package, tail, ["import", "browser"]);
             if (file != null)
             {
-                // Fully qualify path
-                file = path.join(module.location, file);
+                // Fully qualify path and check it's allowed
+                file = await this.checkFile(path.join(module.location, file), { within: module.location });
+                if (!file)
+                    return NOT_FOUND;
 
                 // Generate a proxy for this module that fowards to the real file system location
                 let content = `export * from '${this.#options.moduleBaseUrl}/$/${this.encodePath(file)}';` 
@@ -173,7 +358,12 @@ export default styleEl;
         file = getPackageExport(module.package, tail, ["require", "browser"]);
         if (file != null)
         {
-            let code = await runRollup(path.join(module.location, file));
+            // Rollup entry point must be within the module (any extension)
+            file = await this.checkFile(path.join(module.location, file), { within: module.location, checkExtension: false });
+            if (!file)
+                return NOT_FOUND;
+
+            let code = await runRollup(file);
             return {
                 contentType: "application/javascript",
                 content: code,
