@@ -86,6 +86,10 @@ The following options are available:
 * `moduleBaseUrl` - the URL in which modules are made available (defaults to `/modules`)
 * `livereload` - allows injection of livereload script into html pages (see below)
 * `inYaFace` - if true (false by default) injects a script into html pages to prominently display client side JavaScript errors.
+* `allowedDirs` - an optional array of additional directories (relative to `baseDir`) that files can be served from (see below)
+* `allowExtensions` - an optional array of file extensions to add to the default list of servable file types (see below)
+* `disallowExtensions` - an optional array of file extensions to remove from the default list of servable file types (see below)
+* `unsafeAllowAnyFile` - if true, disables all file access restrictions (not recommended, see below)
 
 
 
@@ -144,6 +148,51 @@ eg: force a package to be bundled using rollup:
         ]
     }
 ```
+
+
+
+## File Access Restrictions
+
+Module files are served from their actual location on disk, which may be
+outside the project directory (eg: hoisted `node_modules` folders, or modules
+installed with `npm link`).  To prevent this being used to read arbitrary files,
+BundleFree only serves files that:
+
+* are inside an allowed directory, and
+* have an allowed file extension.
+
+The allowed directories are the resolved location of every module being served
+plus any directories listed in the `allowedDirs` option.  Note that `baseDir` itself
+is _not_ allowed by default (your project files should be served by `express.static`
+or similar), but can be added to `allowedDirs` if required.
+
+Symbolic links are resolved before checking, so a link can't be used to escape
+an allowed directory.  URLs containing `..` segments (including encoded forms)
+are rejected.
+
+The default allowed file extensions are:
+
+```
+.js .mjs .css .map .wasm .woff .woff2 .ttf .otf .eot .svg .png .jpg .jpeg .gif .webp .avif
+```
+
+(this list is also exported as `defaultAllowedExtensions`).
+
+eg: allow `.json` files (eg: for JSON module imports), disallow `.map` files, and
+    allow files in the `./shared` folder:
+
+```
+    options: {
+        allowedDirs: [ "shared" ],
+        allowExtensions: [ ".json" ],
+        disallowExtensions: [ ".map" ],
+    }
+```
+
+Requests for files that aren't allowed (or don't exist) result in a 404 response.
+
+Setting `unsafeAllowAnyFile: true` disables these checks and restores the
+previous behaviour of serving any file on the machine.  This is _not_ recommended.
 
 
 
